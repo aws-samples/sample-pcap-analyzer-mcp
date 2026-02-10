@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+test_venv/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+.hypothesis/
+.tox/
+coverage.xml
+*-coverage.xml
+
+# Build
+dist/
+build/
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Linting/Formatting
+.ruff_cache/
+.mypy_cache/
+.pylint.d/
+
+# Logs
+*.log
+
+# PCAP files (unless specifically needed)
+pcap_storage/
+*.pcap
+
+# Lock files (keep in repo for reproducibility)
+# Uncomment if you don't want lock files
+# uv.lock
+# poetry.lock
