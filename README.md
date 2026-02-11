@@ -19,6 +19,28 @@ A Model Context Protocol (MCP) server for comprehensive network packet capture a
 
 This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **31 specialized tools** across 8 categories for deep network analysis, troubleshooting, and security assessment.
 
+### Architecture
+
+```mermaid
+graph LR
+    A[AI Model] <--> B[MCP Client]
+    B <--> C[PCAP Analyzer Server]
+    C <--> D[Wireshark/tshark]
+    C <--> E[Network Interfaces]
+    D --> F[PCAP Files]
+    E --> G[Live Capture]
+    F --> H[Analysis Results]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#bfb,stroke:#333,stroke-width:4px
+    style D fill:#fbb,stroke:#333,stroke-width:2px
+    style E fill:#fbf,stroke:#333,stroke-width:2px
+    style F fill:#dff,stroke:#333,stroke-width:2px
+    style G fill:#fdf,stroke:#333,stroke-width:2px
+    style H fill:#dfd,stroke:#333,stroke-width:2px
+```
+
 ### Key Capabilities
 
 - 🔧 Network interface discovery and live packet capture
@@ -92,6 +114,21 @@ uvx awslabs.pcap-analyzer-mcp-server@latest
 ### Amazon Q Developer
 
 Edit `~/.aws/amazonq/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "pcap-analyzer": {
+      "command": "uvx",
+      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
+    }
+  }
+}
+```
+
+### Kiro
+
+At the project level `.kiro/settings/mcp.json`:
 
 ```json
 {
