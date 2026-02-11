@@ -1,327 +1,310 @@
 # PCAP Analyzer MCP Server
 
-A Model Context Protocol (MCP) server for comprehensive network packet capture and analysis using Wireshark/tshark. This server provides 31 specialized tools across 8 categories for deep network analysis, troubleshooting, and security assessment.
+<div align="center">
 
-## Features
+[![smithy-badge](https://img.shields.io/badge/Smithy-PCAP%20Analyzer-8A2BE2)](https://github.com/awslabs/mcp)
+[![PyPI](https://img.shields.io/pypi/v/awslabs.pcap-analyzer-mcp-server.svg)](https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-This MCP server acts as a **bridge** between MCP clients and network analysis tools, allowing generative AI models to perform sophisticated packet capture and analysis tasks. The server provides a comprehensive suite of network analysis capabilities while maintaining proper security controls and file management.
+A Model Context Protocol (MCP) server for comprehensive network packet capture and analysis using Wireshark/tshark.
 
-```mermaid
-graph LR
-    A[Model] <--> B[MCP Client]
-    B <--> C["PCAP Analyzer MCP Server"]
-    C <--> D[Wireshark/tshark]
-    C <--> E[Network Interfaces]
-    D --> F[PCAP Files]
-    E --> G[Live Capture]
-    F --> H[Analysis Results]
+[Installation](#installation) •
+[Configuration](#configuration) •
+[Tools](#tools) •
+[Examples](#usage-examples)
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px
-    style C fill:#bfb,stroke:#333,stroke-width:4px
-    style D fill:#fbb,stroke:#333,stroke-width:2px
-    style E fill:#fbf,stroke:#333,stroke-width:2px
-    style F fill:#dff,stroke:#333,stroke-width:2px
-    style G fill:#fdf,stroke:#333,stroke-width:2px
-    style H fill:#dfd,stroke:#333,stroke-width:2px
-```
+</div>
 
-From a **security** perspective, this server implements safe file handling and controlled network access to ensure that only authorized packet capture and analysis operations are performed.
+## Overview
 
-## Key Capabilities
+This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **31 specialized tools** across 8 categories for deep network analysis, troubleshooting, and security assessment.
 
-### 🔧 Network Interface Management (1 tool)
-- **list_network_interfaces**: Discover available network interfaces for packet capture
+### Key Capabilities
 
-### 📡 Packet Capture Management (4 tools)
-- **start_packet_capture**: Initiate live packet capture with customizable filters
-- **stop_packet_capture**: Stop active capture sessions
-- **get_capture_status**: Monitor active capture sessions
-- **list_captured_files**: Browse captured PCAP files
-
-### 🔍 Basic PCAP Analysis (4 tools)
-- **analyze_pcap_file**: Generate comprehensive packet analysis summaries
-- **extract_http_requests**: Extract and analyze HTTP traffic
-- **generate_traffic_timeline**: Create temporal traffic analysis
-- **search_packet_content**: Search for specific patterns in packet data
-
-### ⚡ Network Performance Analysis (2 tools)
-- **analyze_network_performance**: Assess network performance metrics
-- **analyze_network_latency**: Measure and analyze network latency
-
-### 🔒 TLS/SSL Security Analysis (6 tools)
-- **analyze_tls_handshakes**: Examine TLS handshake processes
-- **analyze_sni_mismatches**: Detect SNI-related issues
-- **extract_certificate_details**: Analyze SSL certificates
-- **analyze_tls_alerts**: Investigate TLS alert messages
-- **analyze_connection_lifecycle**: Track complete connection flows
-- **extract_tls_cipher_analysis**: Analyze cipher suite negotiations
-
-### 🌐 TCP Protocol Analysis (5 tools)
-- **analyze_tcp_retransmissions**: Detect packet loss and retransmissions
-- **analyze_tcp_zero_window**: Identify flow control issues
-- **analyze_tcp_window_scaling**: Examine window scaling behavior
-- **analyze_packet_timing_issues**: Detect timing-related problems
-- **analyze_congestion_indicators**: Assess network congestion
-
-### 🔬 Advanced Network Analysis (5 tools)
-- **analyze_dns_resolution_issues**: Troubleshoot DNS problems
-- **analyze_expert_information**: Leverage Wireshark expert analysis
-- **analyze_protocol_anomalies**: Detect protocol violations
-- **analyze_network_topology**: Map network structure
-- **analyze_security_threats**: Identify potential security issues
-
-### 📊 Performance & Quality Metrics (4 tools)
-- **generate_throughput_io_graph**: Create throughput visualizations
-- **analyze_bandwidth_utilization**: Monitor bandwidth usage
-- **analyze_application_response_times**: Measure application performance
-- **analyze_network_quality_metrics**: Assess overall network quality
+- 🔧 Network interface discovery and live packet capture
+- 📊 Comprehensive protocol analysis (TCP, TLS, BGP, DNS, HTTP)
+- 🔒 Security analysis (TLS handshakes, certificate validation, threat detection)
+- ⚡ Performance metrics (latency, throughput, bandwidth, quality)
+- 🔍 Protocol-specific troubleshooting and expert analysis
 
 ## Prerequisites
 
-1. Install `uv` from [Astral](https://docs.astral.sh/uv/getting-started/installation/) or the [GitHub README](https://github.com/astral-sh/uv#installation)
-2. Install Python using `uv python install 3.10`
-3. Install Wireshark/tshark on your system:
-   - **macOS**: `brew install wireshark`
-   - **Ubuntu/Debian**: `sudo apt-get install tshark`
-   - **Windows**: Download from [Wireshark.org](https://www.wireshark.org/download.html)
-4. Ensure proper permissions for packet capture (may require sudo/administrator privileges)
+- **Python 3.10+**
+- **uv** - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
+- **Wireshark/tshark**:
+  - macOS: `brew install wireshark`
+  - Linux: `sudo apt-get install tshark`  
+  - Windows: Download from [wireshark.org](https://www.wireshark.org/download.html)
 
-## Setup
+### Packet Capture Permissions
 
-### System Configuration
+| Platform | Command |
+|----------|---------|
+| **macOS** | `sudo dseditgroup -o edit -a $(whoami) -t user access_bpf` (restart required) |
+| **Linux** | `sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap` |
+| **Windows** | Run as Administrator with Npcap installed |
 
-For packet capture functionality, you may need to configure system permissions:
+## Installation
 
-#### macOS
+Install using `uvx`:
+
 ```bash
-# Add user to access_bpf group (may require restart)
-sudo dseditgroup -o edit -a $(whoami) -t user access_bpf
+uvx awslabs.pcap-analyzer-mcp-server@latest
 ```
 
-#### Linux
-```bash
-# Allow non-root packet capture
-sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap
-```
+## Configuration
 
-#### Windows
-Run as Administrator or ensure WinPcap/Npcap is properly installed.
+### Claude Desktop
 
-### Installation
-
-| Cursor | VS Code |
-|:------:|:-------:|
-| [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=awslabs.pcap-analyzer-mcp-server&config=eyJjb21tYW5kIjoidXZ4IGF3c2xhYnMucGNhcC1hbmFseXplci1tY3Atc2VydmVyQGxhdGVzdCIsImVudiI6eyJGQVNUTUNQX0xPR19MRVZFTCI6IkVSUk9SIn0sImRpc2FibGVkIjpmYWxzZSwiYXV0b0FwcHJvdmUiOltdfQ%3D%3D) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=PCAP%20Analyzer%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22awslabs.pcap-analyzer-mcp-server%40latest%22%5D%2C%22env%22%3A%7B%22FASTMCP_LOG_LEVEL%22%3A%22ERROR%22%7D%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D) |
-
-#### Amazon Q Developer
-
-Configure the MCP server in your MCP client configuration (e.g., for Amazon Q Developer CLI, edit `~/.aws/amazonq/mcp.json`):
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
-    "awslabs.pcap-analyzer-mcp-server": {
+    "pcap-analyzer": {
+      "command": "uvx",
+      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
+    }
+  }
+}
+```
+
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "pcap-analyzer": {
       "command": "uvx",
       "args": ["awslabs.pcap-analyzer-mcp-server@latest"],
       "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
+        "WIRESHARK_PATH": "C:\\Program Files\\Wireshark\\tshark.exe"
       }
     }
   }
 }
 ```
 
-### Windows Installation
+### Amazon Q Developer
 
-For Windows users, the MCP server configuration format is slightly different:
-
-```json
-{
-  "mcpServers": {
-    "awslabs.pcap-analyzer-mcp-server": {
-      "disabled": false,
-      "timeout": 60,
-      "type": "stdio",
-      "command": "uv",
-      "args": [
-        "tool",
-        "run",
-        "--from",
-        "awslabs.pcap-analyzer-mcp-server@latest",
-        "awslabs.pcap-analyzer-mcp-server.exe"
-      ],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      }
-    }
-  }
-}
-```
-
-#### Docker
-First build the image `docker build -t awslabs/pcap-analyzer-mcp-server .`:
+Edit `~/.aws/amazonq/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "awslabs.pcap-analyzer-mcp-server": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "--interactive",
-        "--net=host",
-        "--cap-add=NET_RAW",
-        "--cap-add=NET_ADMIN",
-        "awslabs/pcap-analyzer-mcp-server:latest"
-      ],
-      "env": {},
-      "disabled": false,
-      "autoApprove": []
-    }
-  }
-}
-```
-
-#### Kiro
-
-At the project level `.kiro/settings/mcp.json`
-
-```json
-{
-  "mcpServers": {
-    "awslabs.pcap-analyzer-mcp-server": {
+    "pcap-analyzer": {
       "command": "uvx",
-      "args": ["awslabs.pcap-analyzer-mcp-server@latest"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      }
+      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
     }
   }
 }
 ```
 
-#### Claude Desktop
+### Environment Variables
 
-```json
-{
-  "mcpServers": {
-    "awslabs.pcap-analyzer-mcp-server": {
-      "command": "uvx",
-      "args": ["awslabs.pcap-analyzer-mcp-server@latest"],
-      "env": {
-        "FASTMCP_LOG_LEVEL": "ERROR"
-      }
-    }
-  }
-}
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PCAP_STORAGE_DIR` | Directory for storing captured PCAP files | `./pcap_storage` |
+| `MAX_CAPTURE_DURATION` | Maximum capture duration in seconds | `3600` |
+| `WIRESHARK_PATH` | Path to tshark executable | `tshark` |
+
+## Tools
+
+This server provides 31 tools organized into 8 categories:
+
+<details>
+<summary><b>Network Interface Management (1 tool)</b></summary>
+
+- `list_network_interfaces` - List available network interfaces for packet capture
+</details>
+
+<details>
+<summary><b>Packet Capture Management (4 tools)</b></summary>
+
+- `start_packet_capture` - Start packet capture on specified interface
+- `stop_packet_capture` - Stop an active packet capture session
+- `get_capture_status` - Get status of all active capture sessions
+- `list_captured_files` - List all captured pcap files in storage directory
+</details>
+
+<details>
+<summary><b>Basic PCAP Analysis (4 tools)</b></summary>
+
+- `analyze_pcap_file` - Analyze a pcap file and generate insights
+- `extract_http_requests` - Extract HTTP requests from pcap file
+- `generate_traffic_timeline` - Generate traffic timeline with specified time intervals
+- `search_packet_content` - Search for specific patterns in packet content
+</details>
+
+<details>
+<summary><b>Network Performance Analysis (2 tools)</b></summary>
+
+- `analyze_network_performance` - Analyze network performance metrics from pcap file
+- `analyze_network_latency` - Analyze network latency and response times
+</details>
+
+<details>
+<summary><b>TLS/SSL Security Analysis (6 tools)</b></summary>
+
+- `analyze_tls_handshakes` - Analyze TLS handshakes including SNI, certificate details
+- `analyze_sni_mismatches` - Analyze SNI mismatches and correlate with connection resets
+- `extract_certificate_details` - Extract SSL certificate details and validate against SNI
+- `analyze_tls_alerts` - Analyze TLS alert messages that indicate handshake failures
+- `analyze_connection_lifecycle` - Analyze complete connection lifecycle from SYN to FIN/RST
+- `extract_tls_cipher_analysis` - Analyze TLS cipher suite negotiations and compatibility issues
+</details>
+
+<details>
+<summary><b>TCP Protocol Analysis (5 tools)</b></summary>
+
+- `analyze_tcp_retransmissions` - Analyze TCP retransmissions and packet loss patterns
+- `analyze_tcp_zero_window` - Analyze TCP zero window conditions and flow control issues
+- `analyze_tcp_window_scaling` - Analyze TCP window scaling and flow control mechanisms
+- `analyze_packet_timing_issues` - Analyze packet timing issues and duplicate packets
+- `analyze_congestion_indicators` - Analyze network congestion indicators and quality metrics
+</details>
+
+<details>
+<summary><b>Advanced Network Analysis (5 tools)</b></summary>
+
+- `analyze_dns_resolution_issues` - Analyze DNS resolution issues and query patterns
+- `analyze_expert_information` - Analyze Wireshark expert information for network issues
+- `analyze_protocol_anomalies` - Analyze protocol anomalies and malformed packets
+- `analyze_network_topology` - Analyze network topology and routing information
+- `analyze_security_threats` - Analyze potential security threats and suspicious activities
+</details>
+
+<details>
+<summary><b>Performance & Quality Metrics (4 tools)</b></summary>
+
+- `generate_throughput_io_graph` - Generate throughput I/O graph data with specified time intervals
+- `analyze_bandwidth_utilization` - Analyze bandwidth utilization and traffic patterns
+- `analyze_application_response_times` - Analyze application layer response times and performance
+- `analyze_network_quality_metrics` - Analyze network quality metrics including jitter and packet loss
+</details>
 
 ## Usage Examples
 
-### Basic Network Analysis
+### Example 1: Analyze BGP Connection Issues
 ```
-"Analyze the network traffic in sample.pcap and identify any performance issues"
-```
-
-### Security Assessment
-```
-"Capture network traffic for 60 seconds and analyze for potential security threats"
+"Analyze bgp.pcap and explain why the BGP connection is failing"
 ```
 
-### TLS Troubleshooting
-```
-"Examine TLS handshakes in the capture file and identify any certificate issues"
-```
+The server examines BGP OPEN messages, AS numbers, connection lifecycle, and identifies configuration mismatches.
 
-### Performance Monitoring
+### Example 2: Live Packet Capture
 ```
-"Generate a throughput analysis for the last hour of network traffic"
+"Capture network traffic on eth0 for 60 seconds and analyze for security threats"
 ```
 
-## Server Configuration Options
-
-The PCAP Analyzer MCP Server supports several configuration options through environment variables:
-
-### `PCAP_STORAGE_DIR`
-Specify the directory for storing captured PCAP files. Default is `./pcap_storage`.
-
-### `MAX_CAPTURE_DURATION`
-Set the maximum allowed capture duration in seconds. Default is 3600 (1 hour).
-
-### `WIRESHARK_PATH`
-Override the default Wireshark/tshark installation path.
-
-Example:
-```bash
-PCAP_STORAGE_DIR=/tmp/pcaps MAX_CAPTURE_DURATION=1800 uvx awslabs.pcap-analyzer-mcp-server@latest
+### Example 3: TLS Troubleshooting
+```
+"Examine TLS handshakes in https-traffic.pcap and identify any certificate issues"
 ```
 
-## Best Practices
+### Example 4: TCP Performance Analysis
+```
+"Check for TCP retransmissions and analyze connection quality in the packet capture"
+```
 
-### Network Analysis
-- Start with basic analysis before diving into specific protocols
-- Use appropriate capture filters to focus on relevant traffic
-- Consider privacy and legal implications when capturing network traffic
-- Store PCAP files securely and delete when no longer needed
+### Example 5: Comprehensive Analysis
+```
+"Give me a complete analysis of all protocols and traffic patterns in network-dump.pcap"
+```
 
-### Performance Optimization
-- Limit capture duration for large networks
-- Use display filters to focus analysis on specific issues
-- Monitor system resources during intensive analysis operations
+## Platform Support
 
-### Security Considerations
-- Only capture traffic you have permission to analyze
-- Be aware of sensitive data in packet captures
-- Use secure storage for PCAP files containing sensitive information
-- Follow organizational policies for network monitoring
+| Platform | Status | Notes |
+|----------|--------|-------|
+| **macOS** | ✅ Fully supported | Requires packet capture permissions |
+| **Linux** | ✅ Fully supported | Requires capabilities or root |
+| **Windows** | ⚠️ Partial support | Use forward slashes in paths |
+
+### Windows Notes
+
+- Use forward slashes for paths: `C:/pcap_storage/file.pcap`
+- Analysis tools work with forward slash paths
+- `start_packet_capture` has known compatibility issues
+- Run as Administrator for packet capture
 
 ## Troubleshooting
 
-### Permission Issues
-- **Linux/macOS**: Ensure proper capabilities are set for packet capture
-- **Windows**: Run with administrator privileges or install WinPcap/Npcap
+<details>
+<summary><b>tshark not found</b></summary>
 
-### Wireshark Not Found
-- Verify Wireshark/tshark is installed and in PATH
-- Set `WIRESHARK_PATH` environment variable if needed
+```bash
+# Verify installation
+tshark --version
 
-### Capture Issues
-- Check network interface availability with `list_network_interfaces`
-- Verify capture filters are syntactically correct
-- Ensure sufficient disk space for PCAP files
+# Install if missing
+brew install wireshark              # macOS
+sudo apt-get install tshark         # Linux
+# Windows: Download from wireshark.org and add to PATH
+```
+</details>
 
-### Analysis Errors
-- Verify PCAP file integrity
-- Check that analysis tools have sufficient memory
-- Ensure display filters are valid Wireshark syntax
+<details>
+<summary><b>Permission denied</b></summary>
 
-## Security Considerations
+**macOS**: `sudo dseditgroup -o edit -a $(whoami) -t user access_bpf` (restart required)
 
-When using this MCP server, consider:
+**Linux**: `sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap`
 
-- **Network Access**: The server requires network interface access for packet capture
-- **File System**: PCAP files are stored locally and may contain sensitive data
-- **Permissions**: Packet capture typically requires elevated privileges
-- **Privacy**: Ensure compliance with privacy laws and organizational policies
-- **Data Retention**: Implement appropriate data retention and deletion policies
+**Windows**: Run as Administrator
+</details>
 
-## Advanced Features
+<details>
+<summary><b>PCAP file not found</b></summary>
 
-### Custom Analysis Scripts
-The server supports integration with custom Wireshark Lua scripts for specialized analysis.
+- List files with `list_captured_files`
+- Use relative path: `bgp.pcap`
+- Or absolute path: `/full/path/file.pcap`
+- Verify `.pcap` extension
+</details>
 
-### Batch Processing
-Multiple PCAP files can be analyzed in batch operations for comparative analysis.
+<details>
+<summary><b>Analysis returns empty results</b></summary>
 
-### Export Formats
-Analysis results can be exported in various formats including JSON, CSV, and XML.
+- PCAP may not contain the analyzed protocol
+- Display filter may be too restrictive
+- Run basic analysis first: `analyze_pcap_file`
+</details>
+
+## Development
+
+```bash
+# Clone repository
+git clone https://github.com/awslabs/mcp.git
+cd mcp/src/pcap-analyzer-mcp-server
+
+# Install dependencies
+uv sync
+
+# Run server
+uv run awslabs.pcap-analyzer-mcp-server
+
+# Run tests
+uv run pytest
+```
 
 ## Contributing
 
-This MCP server is part of the AWS Labs MCP project. For contributions, please refer to the main project guidelines.
+This server is part of the [AWS Labs MCP project](https://github.com/awslabs/mcp). Contributions welcome!
 
 ## License
 
-This project is licensed under the Apache License 2.0. See the LICENSE file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) file.
+
+Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+---
+
+<div align="center">
+
+**Part of [AWS Labs MCP Servers](https://github.com/awslabs/mcp)**
+
+[Documentation](https://awslabs.github.io/mcp/servers/pcap-analyzer-mcp-server/) •
+[Report Bug](https://github.com/awslabs/mcp/issues) •
+[Request Feature](https://github.com/awslabs/mcp/discussions)
+
+</div>
