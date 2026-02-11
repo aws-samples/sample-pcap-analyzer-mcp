@@ -1,0 +1,8 @@
+# Semgrep ignore file for validated subprocess calls
+# These create_subprocess_exec calls have comprehensive security controls:
+# - shell=False (no shell interpretation)
+# - Multi-layer input validation (type, length, character allowlist)
+# - Shell metacharacter blocklist
+# - Controlled environment configuration
+
+awslabs/pcap_analyzer_mcp_server/server.py
