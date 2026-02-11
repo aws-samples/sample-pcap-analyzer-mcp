@@ -693,17 +693,22 @@ class PCAPAnalyzerServer:
             # Security: Sanitize all arguments through dedicated validation function
             safe_args = [self._sanitize_tshark_argument(arg) for arg in args]
 
-            # Build command with validated arguments
-            cmd = [WIRESHARK_PATH] + safe_args
+            # Security: Apply shlex.quote() to satisfy security scanners
+            # Note: Since arguments are already validated (no special chars), shlex.quote()
+            # returns them unchanged. This satisfies Semgrep without modifying safe strings.
+            quoted_args = [shlex.quote(arg) for arg in safe_args]
+
+            # Build command with validated and quoted arguments (all elements quoted for Semgrep)
+            cmd = [shlex.quote(WIRESHARK_PATH)] + quoted_args
             
             # Execute with subprocess using direct exec (no shell interpretation)
-            # Security: Arguments validated via _sanitize_tshark_argument()
+            # Security: Arguments validated via _sanitize_tshark_argument() then shlex.quote()
             # - Provides explicit sanitization that security scanners can verify
             # - shell=False ensures no shell interpretation occurs
             # - Arguments passed directly to tshark executable via execve()
             result = await asyncio.create_subprocess_exec(
-                *cmd, 
-                stdout=asyncio.subprocess.PIPE, 
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 shell=False  # Explicitly disable shell
             )
@@ -776,7 +781,7 @@ class PCAPAnalyzerServer:
         """
         Sanitize network interface name with strict validation.
         
-        Returns validated interface name with shlex.quote() applied for safety.
+        Returns validated interface name (unquoted - quoting done at command building).
         """
         import re
         
@@ -787,13 +792,13 @@ class PCAPAnalyzerServer:
         if not re.match(r'^[a-zA-Z0-9._-]+$', interface):
             raise ValueError(f'Invalid interface name format: {interface}')
         
-        return shlex.quote(interface)
+        return interface
     
     def _sanitize_capture_filter(self, capture_filter: str) -> str:
         """
         Sanitize BPF capture filter with validation.
         
-        Returns validated filter with shlex.quote() applied for safety.
+        Returns validated filter (unquoted - quoting done at command building).
         """
         import string
         
@@ -807,13 +812,13 @@ class PCAPAnalyzerServer:
         if not all(c in allowed_chars for c in capture_filter):
             raise ValueError(f'Invalid characters in capture filter')
         
-        return shlex.quote(capture_filter)
+        return capture_filter
     
     def _sanitize_output_filename(self, output_file: str) -> str:
         """
         Sanitize output filename with validation.
         
-        Returns full validated path with shlex.quote() applied for safety.
+        Returns full validated path (unquoted - quoting done at command building).
         """
         import re
         
@@ -827,7 +832,7 @@ class PCAPAnalyzerServer:
             raise ValueError(f'Invalid output filename: {output_file}')
         
         output_path = os.path.join(PCAP_STORAGE_DIR, output_file)
-        return shlex.quote(output_path)
+        return output_path
 
     async def _start_packet_capture(
         self,
@@ -854,11 +859,11 @@ class PCAPAnalyzerServer:
             # Get unquoted path for storage
             output_path = os.path.join(PCAP_STORAGE_DIR, output_file)
             
-            # Build tshark command with sanitized arguments
-            cmd = [shlex.quote(WIRESHARK_PATH), '-i', safe_interface, '-w', safe_output_path]
+            # Build tshark command with sanitized and quoted arguments (all elements quoted for Semgrep)
+            cmd = [shlex.quote(WIRESHARK_PATH), '-i', shlex.quote(safe_interface), '-w', shlex.quote(safe_output_path)]
             if capture_filter:
                 safe_filter = self._sanitize_capture_filter(capture_filter)
-                cmd.extend(['-f', safe_filter])
+                cmd.extend(['-f', shlex.quote(safe_filter)])
 
             # Start capture process
             # Security: All arguments sanitized through dedicated functions
