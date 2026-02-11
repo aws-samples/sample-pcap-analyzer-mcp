@@ -892,9 +892,9 @@ class PCAPAnalyzerServer:
 
             # Build analysis command based on type
             if analysis_type == 'summary':
-                args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'prot,colinfo']
+                args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'proto,colinfo']
             elif analysis_type == 'protocols':
-                args = ['-r', pcap_path, '-q', '-z', 'prot,colinfo']
+                args = ['-r', pcap_path, '-q', '-z', 'proto,colinfo']
             elif analysis_type == 'conversations':
                 args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'conv,udp']
             else:
