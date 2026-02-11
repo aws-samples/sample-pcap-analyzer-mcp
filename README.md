@@ -116,7 +116,8 @@ aws lambda create-function \
   --zip-file fileb://pcap-analyzer-lambda.zip \
   --timeout 300 \
   --memory-size 1024 \
-  --environment Variables="{PCAP_STORAGE_DIR=/tmp/pcap_storage,WIRESHARK_PATH=/opt/bin/tshark}"
+  --environment Variables="{PCAP_STORAGE_DIR=/tmp/pcap_storage,WIRESHARK_PATH=/opt/bin/tshark}" \
+  # NOTE: Add '/opt/bin' to ALLOWED_TSHARK_DIRS in server.py for Lambda deployments
 ```
 
 2. **Configure AgentCore Gateway**:
@@ -224,7 +225,8 @@ uv run awslabs.pcap-analyzer-mcp-server
       "args": ["awslabs.pcap-analyzer-mcp-server@latest"],
       "env": {
         "WIRESHARK_PATH": "C:\\Program Files\\Wireshark\\tshark.exe"
-      }
+      },
+      "__comment": "You must add 'C:\\Program Files\\Wireshark' to ALLOWED_TSHARK_DIRS in server.py"
     }
   }
 }
@@ -251,7 +253,18 @@ Edit `~/.aws/amazonq/mcp.json`:
 |----------|-------------|---------|
 | `PCAP_STORAGE_DIR` | Directory for storing captured PCAP files | `./pcap_storage` |
 | `MAX_CAPTURE_DURATION` | Maximum capture duration in seconds | `3600` |
-| `WIRESHARK_PATH` | Path to tshark executable | `tshark` |
+| `WIRESHARK_PATH` | Path to tshark executable. Must resolve to an allowed directory (see below) | `tshark` |
+
+#### `WIRESHARK_PATH` Security Validation
+
+For security, the tshark executable path is validated at startup against an allowlist of known-safe directories:
+
+- `/usr/bin`
+- `/usr/local/bin`
+- `/opt/homebrew/bin`
+- `/snap/bin`
+
+If your tshark is installed in a different directory (e.g., `/opt/bin` for Lambda layers, or `C:\Program Files\Wireshark\` on Windows), update the `ALLOWED_TSHARK_DIRS` list in `server.py` to include your installation path.
 
 ## Tools
 
@@ -366,11 +379,16 @@ The server examines BGP OPEN messages, AS numbers, connection lifecycle, and ide
 # Verify installation
 tshark --version
 
+# Check where tshark is installed
+which tshark
+
 # Install if missing
 brew install wireshark              # macOS
 sudo apt-get install tshark         # Linux
 # Windows: Download from wireshark.org and add to PATH
 ```
+
+If tshark is installed but you see `tshark path ... is not in allowed directories`, add your tshark's parent directory to the `ALLOWED_TSHARK_DIRS` list in `server.py`.
 </details>
 
 <details>

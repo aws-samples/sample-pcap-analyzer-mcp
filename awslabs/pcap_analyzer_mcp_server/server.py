@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import psutil
-import shlex
+import shutil
 import time
 from datetime import datetime
 from mcp.server import Server
@@ -41,7 +41,43 @@ logger = logging.getLogger(__name__)
 # Global configuration
 PCAP_STORAGE_DIR = os.getenv('PCAP_STORAGE_DIR', './pcap_storage')
 MAX_CAPTURE_DURATION = int(os.getenv('MAX_CAPTURE_DURATION', '3600'))
-WIRESHARK_PATH = os.getenv('WIRESHARK_PATH', 'tshark')
+_WIRESHARK_PATH_RAW = os.getenv('WIRESHARK_PATH', 'tshark')
+
+ALLOWED_TSHARK_NAMES = ['tshark']
+ALLOWED_TSHARK_DIRS = ['/usr/bin', '/usr/local/bin', '/opt/homebrew/bin', '/snap/bin']
+
+
+def _resolve_tshark_path() -> str:
+    """Resolve and validate tshark executable path at startup.
+
+    Security: Validates the configured tshark path against an allowlist
+    of known-safe executable names and directories to prevent arbitrary
+    command execution.
+    """
+    configured = _WIRESHARK_PATH_RAW
+
+    # If bare command name, resolve via PATH
+    if '/' not in configured:
+        if configured not in ALLOWED_TSHARK_NAMES:
+            raise RuntimeError(f'Disallowed tshark executable name: {configured}')
+        resolved = shutil.which(configured)
+        if not resolved:
+            raise RuntimeError('tshark not found in PATH. Install Wireshark/tshark or set WIRESHARK_PATH.')
+        configured = resolved
+
+    # Validate resolved absolute path
+    real_path = os.path.realpath(configured)
+    parent_dir = os.path.dirname(real_path)
+    if parent_dir not in ALLOWED_TSHARK_DIRS:
+        raise RuntimeError(
+            f'tshark path {real_path} is not in allowed directories: {ALLOWED_TSHARK_DIRS}. '
+            f'Update ALLOWED_TSHARK_DIRS if your tshark is installed elsewhere.'
+        )
+
+    return real_path
+
+
+TSHARK_PATH = _resolve_tshark_path()
 
 # Ensure storage directory exists
 Path(PCAP_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
@@ -679,38 +715,27 @@ class PCAPAnalyzerServer:
         """
         Run tshark command with comprehensive input validation and security checks.
         
-        Security Model:
-        - All arguments sanitized via _sanitize_tshark_argument()
-        - Executable path controlled via environment configuration
-        - shell=False ensures no shell interpretation
-        - Multi-layer validation provides defense-in-depth
+        Security Model (defense-in-depth):
+        1. Executable path validated against allowlist at startup (_resolve_tshark_path)
+        2. All arguments sanitized via _sanitize_tshark_argument() with character
+           allowlist + dangerous metacharacter blocklist
+        3. shell=False ensures arguments passed directly to execve(), no shell interpretation
         """
         try:
-            # Security: Validate wireshark path is safe
-            if not WIRESHARK_PATH or not isinstance(WIRESHARK_PATH, str):
-                raise ValueError('Invalid WIRESHARK_PATH configuration')
-
             # Security: Sanitize all arguments through dedicated validation function
             safe_args = [self._sanitize_tshark_argument(arg) for arg in args]
 
-            # Security: Apply shlex.quote() to satisfy security scanners
-            # Note: Since arguments are already validated (no special chars), shlex.quote()
-            # returns them unchanged. This satisfies Semgrep without modifying safe strings.
-            quoted_args = [shlex.quote(arg) for arg in safe_args]
+            # Build command with validated arguments (no shlex.quote - not needed for shell=False)
+            cmd = [TSHARK_PATH] + safe_args
 
-            # Build command with validated and quoted arguments (all elements quoted for Semgrep)
-            cmd = [shlex.quote(WIRESHARK_PATH)] + quoted_args
-            
-            # Execute with subprocess using direct exec (no shell interpretation)
-            # Security: Arguments validated via _sanitize_tshark_argument() then shlex.quote()
-            # - Provides explicit sanitization that security scanners can verify
-            # - shell=False ensures no shell interpretation occurs
-            # - Arguments passed directly to tshark executable via execve()
-            result = await asyncio.create_subprocess_exec(
+            # Security: Command injection mitigated via defense-in-depth:
+            # 1. Executable path validated against allowlist at startup (_resolve_tshark_path)
+            # 2. All arguments validated via _sanitize_tshark_argument() with character allowlist + blocklist
+            # 3. shell=False - arguments passed directly to execve(), no shell interpretation
+            result = await asyncio.create_subprocess_exec(  # nosemgrep: dangerous-asyncio-create-exec-tainted-env-args, dangerous-asyncio-create-exec-audit
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                shell=False  # Explicitly disable shell
             )
             stdout, stderr = await result.communicate()
 
@@ -859,23 +884,22 @@ class PCAPAnalyzerServer:
             # Get unquoted path for storage
             output_path = os.path.join(PCAP_STORAGE_DIR, output_file)
             
-            # Build tshark command with sanitized and quoted arguments (all elements quoted for Semgrep)
-            cmd = [shlex.quote(WIRESHARK_PATH), '-i', shlex.quote(safe_interface), '-w', shlex.quote(safe_output_path)]
+            # Build tshark command with sanitized arguments (no shlex.quote - not needed for shell=False)
+            cmd = [TSHARK_PATH, '-i', safe_interface, '-w', safe_output_path]
             if capture_filter:
                 safe_filter = self._sanitize_capture_filter(capture_filter)
-                cmd.extend(['-f', shlex.quote(safe_filter)])
+                cmd.extend(['-f', safe_filter])
 
-            # Start capture process
-            # Security: All arguments sanitized through dedicated functions
-            # - interface: validated via _sanitize_capture_interface()
-            # - output_path: validated via _sanitize_output_filename()
-            # - capture_filter: validated via _sanitize_capture_filter()
-            # - shell=False ensures no shell interpretation
-            process = await asyncio.create_subprocess_exec(
-                *cmd, 
-                stdout=asyncio.subprocess.PIPE, 
+            # Security: Command injection mitigated via defense-in-depth:
+            # 1. Executable path validated against allowlist at startup (_resolve_tshark_path)
+            # 2. Interface validated via _sanitize_capture_interface() (regex allowlist)
+            # 3. Output path validated via _sanitize_output_filename() (regex allowlist, .pcap only)
+            # 4. Capture filter validated via _sanitize_capture_filter() (character allowlist)
+            # 5. shell=False - arguments passed directly to execve(), no shell interpretation
+            process = await asyncio.create_subprocess_exec(  # nosemgrep: dangerous-asyncio-create-exec-tainted-env-args, dangerous-asyncio-create-exec-audit
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                shell=False
             )
 
             # Store capture info
