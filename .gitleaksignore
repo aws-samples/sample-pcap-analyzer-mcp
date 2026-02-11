@@ -1,0 +1,27 @@
+# Gitleaks Ignore File
+# These are false positives from third-party library dependencies in test_venv
+# The test_venv directory is already in .gitignore and should not be committed
+
+# authlib - OAuth library with example/test credentials in documentation
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/resource_owner_password_credentials.py:generic-api-key:130
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/authorization_code.py:generic-api-key:264
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/authorization_code.py:generic-api-key:261
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6750/token.py:generic-api-key:16
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6750/token.py:generic-api-key:13
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/refresh_token.py:generic-api-key:105
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/parameters.py:generic-api-key:199
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth1/rfc5849/authorization_server.py:generic-api-key:230
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth1/rfc5849/authorization_server.py:generic-api-key:215
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth1/rfc5849/authorization_server.py:generic-api-key:135
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/implicit.py:generic-api-key:189
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/resource_owner_password_credentials.py:generic-api-key:133
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/authlib/oauth2/rfc6749/grants/client_credentials.py:generic-api-key:96
+
+# dnspython - DNS library with example/test keys in DNSSEC algorithms
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/dns/dnssecalgs/eddsa.py:generic-api-key:68
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/dns/dnssecalgs/eddsa.py:generic-api-key:69
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/dns/dnssecalgs/eddsa.py:generic-api-key:57
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/dns/dnssecalgs/eddsa.py:generic-api-key:56
+
+# boto3 - AWS SDK with example credentials in CloudFront documentation
+b51f6b70043fb3cce0d8d3ddb78e240eff25a5ea:test_venv/lib/python3.13/site-packages/boto3/examples/cloudfront.rst:aws-access-token:25

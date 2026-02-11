@@ -74,7 +74,7 @@ graph LR
 |:------:|:-------:|
 | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=awslabs.pcap-analyzer-mcp-server&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJhd3NsYWJzLnBjYXAtYW5hbHl6ZXItbWNwLXNlcnZlckBsYXRlc3QiXX0=) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=PCAP%20Analyzer%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22awslabs.pcap-analyzer-mcp-server%40latest%22%5D%7D) |
 
-### Option 2: Kiro (Amazon Internal)
+### Option 2: Kiro
 
 **For Kiro users**, add this server at the project level in `.kiro/settings/mcp.json`:
 
@@ -91,7 +91,7 @@ graph LR
 
 Visit [kiro.amazon.dev](https://kiro.amazon.dev) for more information.
 
-### Option 3: AgentCore Gateway with Lambda (Amazon Internal)
+### Option 3: AgentCore Gateway with Lambda
 
 **For AgentCore users**, this server can be deployed as a Lambda function behind AgentCore Gateway.
 
@@ -245,21 +245,6 @@ Edit `~/.aws/amazonq/mcp.json`:
 }
 ```
 
-### Kiro
-
-At the project level `.kiro/settings/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "pcap-analyzer": {
-      "command": "uvx",
-      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
-    }
-  }
-}
-```
-
 ### Environment Variables
 
 | Variable | Description | Default |
@@ -371,21 +356,6 @@ The server examines BGP OPEN messages, AS numbers, connection lifecycle, and ide
 ```
 "Give me a complete analysis of all protocols and traffic patterns in network-dump.pcap"
 ```
-
-## Platform Support
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| **macOS** | ✅ Fully supported | Requires packet capture permissions |
-| **Linux** | ✅ Fully supported | Requires capabilities or root |
-| **Windows** | ⚠️ Partial support | Use forward slashes in paths |
-
-### Windows Notes
-
-- Use forward slashes for paths: `C:/pcap_storage/file.pcap`
-- Analysis tools work with forward slash paths
-- `start_packet_capture` has known compatibility issues
-- Run as Administrator for packet capture
 
 ## Troubleshooting
 
