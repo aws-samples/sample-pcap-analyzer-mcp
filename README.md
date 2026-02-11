@@ -66,16 +66,135 @@ graph LR
 | **Linux** | `sudo setcap cap_net_raw,cap_net_admin=eip /usr/bin/dumpcap` |
 | **Windows** | Run as Administrator with Npcap installed |
 
-## Installation
+## 📦 Installation Methods
 
-| Cursor | VS Code | Kiro |
-|:------:|:-------:|:----:|
-| [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=awslabs.pcap-analyzer-mcp-server&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJhd3NsYWJzLnBjYXAtYW5hbHl6ZXItbWNwLXNlcnZlckBsYXRlc3QiXX0=) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=PCAP%20Analyzer%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22awslabs.pcap-analyzer-mcp-server%40latest%22%5D%7D) | [Install](https://kiro.amazon.dev) |
+### Option 1: One-Click Install (Cursor, VS Code)
 
-Or install manually using `uvx`:
+| Cursor | VS Code |
+|:------:|:-------:|
+| [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=awslabs.pcap-analyzer-mcp-server&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJhd3NsYWJzLnBjYXAtYW5hbHl6ZXItbWNwLXNlcnZlckBsYXRlc3QiXX0=) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-FF9900?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=PCAP%20Analyzer%20MCP%20Server&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22awslabs.pcap-analyzer-mcp-server%40latest%22%5D%7D) |
+
+### Option 2: Kiro (Amazon Internal)
+
+**For Kiro users**, add this server at the project level in `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "pcap-analyzer": {
+      "command": "uvx",
+      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
+    }
+  }
+}
+```
+
+Visit [kiro.amazon.dev](https://kiro.amazon.dev) for more information.
+
+### Option 3: AgentCore Gateway with Lambda (Amazon Internal)
+
+**For AgentCore users**, this server can be deployed as a Lambda function behind AgentCore Gateway.
+
+#### Prerequisites
+- AWS account with Lambda and AgentCore Gateway access
+- Kiro configured for your project
+- AWS credentials configured
+
+#### Deployment Steps
+
+1. **Create Lambda Function**:
+```bash
+# Package the server for Lambda
+zip -r pcap-analyzer-lambda.zip awslabs/ pyproject.toml
+
+# Create Lambda function
+aws lambda create-function \
+  --function-name pcap-analyzer-mcp-server \
+  --runtime python3.10 \
+  --role arn:aws:iam::ACCOUNT_ID:role/lambda-execution-role \
+  --handler awslabs.pcap_analyzer_mcp_server.server.lambda_handler \
+  --zip-file fileb://pcap-analyzer-lambda.zip \
+  --timeout 300 \
+  --memory-size 1024 \
+  --environment Variables="{PCAP_STORAGE_DIR=/tmp/pcap_storage,WIRESHARK_PATH=/opt/bin/tshark}"
+```
+
+2. **Configure AgentCore Gateway**:
+
+Add to your Kiro project's `.kiro/agentcore-gateway.json`:
+
+```json
+{
+  "mcpServers": {
+    "pcap-analyzer": {
+      "type": "lambda",
+      "functionName": "pcap-analyzer-mcp-server",
+      "region": "us-east-1",
+      "timeout": 300
+    }
+  }
+}
+```
+
+3. **Deploy tshark Layer** (Required):
+
+Since Lambda doesn't include tshark, you need to provide it:
 
 ```bash
+# Create Lambda layer with tshark
+mkdir -p layer/bin
+# Download static tshark binary or compile for Amazon Linux 2023
+cp /path/to/tshark layer/bin/
+
+cd layer
+zip -r ../tshark-layer.zip .
+cd ..
+
+# Create layer
+aws lambda publish-layer-version \
+  --layer-name tshark-layer \
+  --zip-file fileb://tshark-layer.zip \
+  --compatible-runtimes python3.10 python3.11
+
+# Attach layer to function
+aws lambda update-function-configuration \
+  --function-name pcap-analyzer-mcp-server \
+  --layers arn:aws:lambda:REGION:ACCOUNT:layer:tshark-layer:VERSION
+```
+
+4. **Test the Integration**:
+
+In Kiro, the server will be automatically available through AgentCore Gateway:
+
+```python
+# Kiro will handle the routing
+# Use the tools as normal through your AI agent
+"Analyze bgp.pcap and explain the BGP connection failure"
+```
+
+#### Lambda Considerations
+
+- **Storage**: Lambda has 512MB `/tmp` storage - suitable for analysis, limited for capture
+- **Timeout**: Set appropriate timeout (max 900s) based on analysis complexity
+- **Memory**: Recommend 1024MB+ for large PCAP files
+- **Capture**: Live packet capture not supported in Lambda (analysis only)
+- **tshark**: Must be provided via Lambda layer (not included in base runtime)
+
+### Option 4: Manual Installation
+
+```bash
+# Using uvx (recommended)
 uvx awslabs.pcap-analyzer-mcp-server@latest
+
+# Using pip
+pip install awslabs.pcap-analyzer-mcp-server
+awslabs.pcap-analyzer-mcp-server
+
+# From source
+git clone https://github.com/awslabs/mcp.git
+cd mcp/src/pcap-analyzer-mcp-server
+uv sync
+uv run awslabs.pcap-analyzer-mcp-server
 ```
 
 ## Configuration
