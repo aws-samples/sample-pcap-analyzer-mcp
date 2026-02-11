@@ -53,6 +53,12 @@ def _resolve_tshark_path() -> str:
     Security: Validates the configured tshark path against an allowlist
     of known-safe executable names and directories to prevent arbitrary
     command execution.
+
+    On macOS with Homebrew, shutil.which() returns a symlink like
+    /opt/homebrew/bin/tshark that points to a Cellar path. We validate
+    the directory of the resolved which() path (the symlink location),
+    not the deep realpath, since the symlink directory is the known-safe
+    location managed by the package manager.
     """
     configured = _WIRESHARK_PATH_RAW
 
@@ -65,16 +71,17 @@ def _resolve_tshark_path() -> str:
             raise RuntimeError('tshark not found in PATH. Install Wireshark/tshark or set WIRESHARK_PATH.')
         configured = resolved
 
-    # Validate resolved absolute path
-    real_path = os.path.realpath(configured)
-    parent_dir = os.path.dirname(real_path)
+    # Validate the directory of the path (before symlink resolution)
+    # This handles Homebrew symlinks: /opt/homebrew/bin/tshark -> /opt/homebrew/Cellar/...
+    parent_dir = os.path.dirname(os.path.abspath(configured))
     if parent_dir not in ALLOWED_TSHARK_DIRS:
         raise RuntimeError(
-            f'tshark path {real_path} is not in allowed directories: {ALLOWED_TSHARK_DIRS}. '
+            f'tshark directory {parent_dir} is not in allowed directories: {ALLOWED_TSHARK_DIRS}. '
             f'Update ALLOWED_TSHARK_DIRS if your tshark is installed elsewhere.'
         )
 
-    return real_path
+    # Return the real path for actual execution
+    return os.path.realpath(configured)
 
 
 TSHARK_PATH = _resolve_tshark_path()
