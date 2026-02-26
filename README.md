@@ -771,10 +771,6 @@ uv run awslabs.pcap-analyzer-mcp-server
 uv run pytest
 ```
 
-## Contributing
-
-This server is part of the [AWS Labs MCP project](https://github.com/awslabs/mcp). Contributions welcome!
-
 ## License
 
 Apache License 2.0 - see [LICENSE](LICENSE) file.
