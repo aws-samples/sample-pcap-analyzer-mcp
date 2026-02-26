@@ -8,7 +8,7 @@
 
 A Model Context Protocol (MCP) server for comprehensive network packet capture and analysis using Wireshark/tshark.
 
-[Installation](#installation) •
+[Installation](#-installation-methods) •
 [Configuration](#configuration) •
 [Tools](#tools) •
 [Examples](#usage-examples)
@@ -131,10 +131,6 @@ graph TB
     style K fill:#eee,stroke:#333,stroke-width:2px
 ```
 
-> **PCAP File Ingestion Options (Cloud Deployment)**:
-> - **Manual Upload**: Copy `.pcap` files directly to S3 — `aws s3 cp capture.pcap s3://pcap-analyzer-storage-ACCOUNT_ID/`
-> - **SSM Active Troubleshooting**: Use AWS Systems Manager Run Command to capture packets on live EC2 instances and stream results to S3 in real time (see [PCAP Ingestion via SSM](#pcap-ingestion-via-ssm))
-
 ### Key Capabilities
 
 - 🔧 Network interface discovery and live packet capture
@@ -149,7 +145,7 @@ graph TB
 - **uv** - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
 - **Wireshark/tshark**:
   - macOS: `brew install wireshark`
-  - Linux: `sudo apt-get install tshark`  
+  - Linux: `sudo apt-get install tshark`
   - Windows: Download from [wireshark.org](https://www.wireshark.org/download.html)
 
 ### Packet Capture Permissions
@@ -208,9 +204,7 @@ cat > lambda-trust-policy.json << 'EOF'
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": {
-        "Service": "lambda.amazonaws.com"
-      },
+      "Principal": { "Service": "lambda.amazonaws.com" },
       "Action": "sts:AssumeRole"
     }
   ]
@@ -227,7 +221,7 @@ aws iam attach-role-policy \
   --role-name pcap-analyzer-lambda-role \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-# (Optional) Attach S3 access if storing PCAP files in S3
+# Attach S3 access for PCAP file storage
 aws iam attach-role-policy \
   --role-name pcap-analyzer-lambda-role \
   --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
@@ -264,13 +258,10 @@ Since Lambda doesn't include tshark, you must provide it via a Lambda layer:
 ```bash
 # Create Lambda layer with tshark
 mkdir -p layer/bin
-# Download static tshark binary or compile for Amazon Linux 2023
-cp /path/to/static-tshark layer/bin/tshark
+cp /path/to/static-tshark layer/bin/tshark   # Download static binary for Amazon Linux 2023
 chmod +x layer/bin/tshark
 
-cd layer
-zip -r ../tshark-layer.zip .
-cd ..
+cd layer && zip -r ../tshark-layer.zip . && cd ..
 
 # Publish layer
 aws lambda publish-layer-version \
@@ -293,35 +284,18 @@ Inbound authorization protects the AgentCore Gateway endpoint so only authentica
 ##### 4a. Create a Cognito User Pool
 
 ```bash
-# Create User Pool
 aws cognito-idp create-user-pool \
   --pool-name pcap-analyzer-user-pool \
   --policies '{"PasswordPolicy":{"MinimumLength":8,"RequireUppercase":true,"RequireLowercase":true,"RequireNumbers":true}}' \
   --auto-verified-attributes email \
   --region us-east-1
-
 # Note the UserPoolId from the output, e.g.: us-east-1_XXXXXXXXX
 ```
 
-##### 4b. Create a Cognito User Pool Client (App Client)
+##### 4b. Create a Resource Server and App Client
 
 ```bash
-# Create app client (resource server / M2M client)
-aws cognito-idp create-user-pool-client \
-  --user-pool-id us-east-1_XXXXXXXXX \
-  --client-name pcap-analyzer-gateway-client \
-  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
-  --allowed-o-auth-flows client_credentials \
-  --allowed-o-auth-scopes pcap-analyzer/read pcap-analyzer/write \
-  --generate-secret \
-  --region us-east-1
-
-# Note the ClientId and ClientSecret from the output
-```
-
-##### 4c. Create a Resource Server (OAuth2 Scope Definition)
-
-```bash
+# Create resource server (defines OAuth2 scopes)
 aws cognito-idp create-resource-server \
   --user-pool-id us-east-1_XXXXXXXXX \
   --identifier https://pcap-analyzer.example.com \
@@ -329,143 +303,31 @@ aws cognito-idp create-resource-server \
   --scopes ScopeName=read,ScopeDescription="Read access" \
             ScopeName=write,ScopeDescription="Write/capture access" \
   --region us-east-1
+
+# Create app client with client_credentials grant
+aws cognito-idp create-user-pool-client \
+  --user-pool-id us-east-1_XXXXXXXXX \
+  --client-name pcap-analyzer-gateway-client \
+  --allowed-o-auth-flows client_credentials \
+  --allowed-o-auth-scopes pcap-analyzer/read pcap-analyzer/write \
+  --generate-secret \
+  --region us-east-1
+# Note the ClientId and ClientSecret from the output
 ```
 
-##### 4d. Configure a Cognito Domain
+##### 4c. Configure a Cognito Domain
 
 ```bash
 aws cognito-idp create-user-pool-domain \
   --domain pcap-analyzer-auth \
   --user-pool-id us-east-1_XXXXXXXXX \
   --region us-east-1
-
-# Token endpoint will be:
-# https://pcap-analyzer-auth.auth.us-east-1.amazoncognito.com/oauth2/token
+# Token endpoint: https://pcap-analyzer-auth.auth.us-east-1.amazoncognito.com/oauth2/token
 ```
 
-##### 4e. Configure AgentCore Gateway with Cognito Inbound Auth
+##### 4d. Configure AgentCore Gateway
 
 Add to your Kiro project's `.kiro/agentcore-gateway.json`:
-
-```json
-{
-  "mcpServers": {
-    "pcap-analyzer": {
-      "type": "lambda",
-      "functionName": "pcap-analyzer-mcp-server",
-      "region": "us-east-1",
-      "timeout": 300,
-      "inboundAuth": {
-        "type": "oauth2",
-        "provider": "cognito",
-        "userPoolId": "us-east-1_XXXXXXXXX",
-        "clientId": "YOUR_COGNITO_CLIENT_ID",
-        "tokenEndpoint": "https://pcap-analyzer-auth.auth.us-east-1.amazoncognito.com/oauth2/token",
-        "scopes": ["pcap-analyzer/read", "pcap-analyzer/write"],
-        "jwksUri": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_XXXXXXXXX/.well-known/jwks.json"
-      }
-    }
-  }
-}
-```
-
-##### 4f. Obtain an Access Token (Client Credentials Flow)
-
-Clients must obtain a Bearer token from Cognito before calling the gateway:
-
-```bash
-# Get access token using Client Credentials grant
-curl -X POST \
-  https://pcap-analyzer-auth.auth.us-east-1.amazoncognito.com/oauth2/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=YOUR_COGNITO_CLIENT_ID" \
-  -d "client_secret=YOUR_COGNITO_CLIENT_SECRET" \
-  -d "scope=pcap-analyzer/read pcap-analyzer/write"
-
-# Response:
-# {
-#   "access_token": "eyJraWQ...",
-#   "token_type": "Bearer",
-#   "expires_in": 3600
-# }
-```
-
-##### 4g. Call AgentCore Gateway with the Token
-
-```bash
-# Use the Bearer token in requests to AgentCore Gateway
-curl -X POST https://YOUR_AGENTCORE_GATEWAY_ENDPOINT/mcp \
-  -H "Authorization: Bearer eyJraWQ..." \
-  -H "Content-Type: application/json" \
-  -d '{"method": "tools/list", "params": {}}'
-```
-
-> **Token Validation**: AgentCore Gateway automatically validates the JWT against Cognito's JWKS endpoint. Requests with expired, invalid, or missing tokens are rejected with HTTP 401.
-
----
-
-#### Step 5: Configure Outbound Authorization — IAM
-
-Outbound authorization controls what AWS resources the Lambda function can access when executing on behalf of a user. This uses **IAM roles** to grant least-privilege access.
-
-##### 5a. Create a Scoped IAM Policy for Lambda Outbound Access
-
-```bash
-cat > pcap-analyzer-outbound-policy.json << 'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AllowS3PcapStorage",
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:ListBucket",
-        "s3:DeleteObject"
-      ],
-      "Resource": [
-        "arn:aws:s3:::pcap-analyzer-storage-YOUR_ACCOUNT_ID",
-        "arn:aws:s3:::pcap-analyzer-storage-YOUR_ACCOUNT_ID/*"
-      ]
-    },
-    {
-      "Sid": "AllowCloudWatchLogs",
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "arn:aws:logs:*:YOUR_ACCOUNT_ID:log-group:/aws/lambda/pcap-analyzer-*"
-    },
-    {
-      "Sid": "AllowXRayTracing",
-      "Effect": "Allow",
-      "Action": [
-        "xray:PutTraceSegments",
-        "xray:PutTelemetryRecords"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-
-# Create and attach the policy
-aws iam create-policy \
-  --policy-name pcap-analyzer-outbound-policy \
-  --policy-document file://pcap-analyzer-outbound-policy.json
-
-aws iam attach-role-policy \
-  --role-name pcap-analyzer-lambda-role \
-  --policy-arn arn:aws:iam::YOUR_ACCOUNT_ID:policy/pcap-analyzer-outbound-policy
-```
-
-##### 5b. Enable IAM Outbound Auth in AgentCore Gateway Configuration
-
-Update `.kiro/agentcore-gateway.json` to include outbound IAM settings:
 
 ```json
 {
@@ -487,65 +349,63 @@ Update `.kiro/agentcore-gateway.json` to include outbound IAM settings:
       "outboundAuth": {
         "type": "iam",
         "roleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/pcap-analyzer-lambda-role",
-        "sessionName": "AgentCoreGatewaySession",
-        "externalId": "YOUR_EXTERNAL_ID_OPTIONAL"
+        "sessionName": "AgentCoreGatewaySession"
       }
     }
   }
 }
 ```
 
-##### 5c. (Optional) Use IAM Roles Anywhere for Cross-Account or Federated Access
+> **Token Validation**: AgentCore Gateway automatically validates the JWT against Cognito's JWKS endpoint. Requests with expired, invalid, or missing tokens are rejected with HTTP 401.
 
-If the Lambda function needs to assume a different role for cross-account access:
+---
+
+#### Step 5: Configure Outbound Authorization — IAM
+
+Outbound authorization controls what AWS resources the Lambda function can access. Create a scoped IAM policy:
 
 ```bash
-# Update the Lambda role trust policy to allow role chaining
-cat > cross-account-trust.json << 'EOF'
+cat > pcap-analyzer-outbound-policy.json << 'EOF'
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "AllowS3PcapStorage",
       "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::YOUR_ACCOUNT_ID:role/pcap-analyzer-lambda-role"
-      },
-      "Action": "sts:AssumeRole",
-      "Condition": {
-        "StringEquals": {
-          "sts:ExternalId": "YOUR_EXTERNAL_ID"
-        }
-      }
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
+      "Resource": [
+        "arn:aws:s3:::pcap-analyzer-storage-YOUR_ACCOUNT_ID",
+        "arn:aws:s3:::pcap-analyzer-storage-YOUR_ACCOUNT_ID/*"
+      ]
+    },
+    {
+      "Sid": "AllowCloudWatchLogs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:*:YOUR_ACCOUNT_ID:log-group:/aws/lambda/pcap-analyzer-*"
+    },
+    {
+      "Sid": "AllowXRayTracing",
+      "Effect": "Allow",
+      "Action": ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+      "Resource": "*"
     }
   ]
 }
 EOF
 
-# Allow Lambda role to assume target role
-cat > allow-assume-role-policy.json << 'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "sts:AssumeRole",
-      "Resource": "arn:aws:iam::TARGET_ACCOUNT_ID:role/pcap-analyzer-target-role"
-    }
-  ]
-}
-EOF
+aws iam create-policy \
+  --policy-name pcap-analyzer-outbound-policy \
+  --policy-document file://pcap-analyzer-outbound-policy.json
 
-aws iam put-role-policy \
+aws iam attach-role-policy \
   --role-name pcap-analyzer-lambda-role \
-  --policy-name allow-assume-cross-account \
-  --policy-document file://allow-assume-role-policy.json
+  --policy-arn arn:aws:iam::YOUR_ACCOUNT_ID:policy/pcap-analyzer-outbound-policy
 ```
 
 ---
 
-#### Step 6: Complete Architecture
-
-With both inbound and outbound authorization configured, the request flow is:
+#### Step 6: Complete Authorization Flow
 
 ```mermaid
 sequenceDiagram
@@ -553,7 +413,7 @@ sequenceDiagram
     participant Cognito as Amazon Cognito
     participant Gateway as AgentCore Gateway
     participant Lambda as Lambda Function
-    participant AWS as AWS Services (S3, etc.)
+    participant S3 as Amazon S3
 
     Client->>Cognito: POST /oauth2/token (client_credentials)
     Cognito-->>Client: Bearer Token (JWT)
@@ -562,49 +422,106 @@ sequenceDiagram
     Gateway->>Cognito: Validate JWT (JWKS)
     Cognito-->>Gateway: Token Valid ✓
 
-    Gateway->>Lambda: Invoke (with IAM SigV4 signing)
-    Lambda->>AWS: AWS API calls (using IAM role)
-    AWS-->>Lambda: Results
+    Gateway->>Lambda: Invoke (IAM SigV4 signed)
+    Lambda->>S3: GetObject PCAP file (IAM role)
+    S3-->>Lambda: PCAP data
     Lambda-->>Gateway: MCP Response
     Gateway-->>Client: MCP Response
 ```
 
 ---
 
-#### Step 7: Test the Integration
+#### Step 7: PCAP Ingestion for Cloud Deployment
+
+The Lambda function reads PCAP files from S3. There are two ways to get files into S3:
+
+**Option A — Manual Upload** (post-incident forensic analysis, existing captures):
 
 ```bash
-# 1. Get Cognito access token
+# Create S3 bucket (one-time setup)
+aws s3 mb s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID --region us-east-1
+
+# Upload PCAP files
+aws s3 cp capture.pcap s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/
+aws s3 cp ./pcap_files/ s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/ --recursive --include "*.pcap"
+```
+
+**Option B — Active Capture via AWS SSM** (live troubleshooting, no SSH/open ports needed):
+
+```bash
+# Capture packets on EC2 instance for 60 seconds and upload to S3
+aws ssm send-command \
+  --instance-ids "i-XXXXXXXXXXXXXXXXX" \
+  --document-name "AWS-RunShellScript" \
+  --parameters '{"commands":[
+    "CAPTURE_FILE=/tmp/capture-$(date +%Y%m%d-%H%M%S).pcap",
+    "S3_BUCKET=pcap-analyzer-storage-YOUR_ACCOUNT_ID",
+    "timeout 60 tcpdump -i any -w $CAPTURE_FILE -s 0 2>/dev/null || true",
+    "aws s3 cp $CAPTURE_FILE s3://$S3_BUCKET/captures/ --region us-east-1",
+    "rm -f $CAPTURE_FILE"
+  ]}' \
+  --region us-east-1
+
+# Capture only TLS traffic (port 443)
+aws ssm send-command \
+  --instance-ids "i-XXXXXXXXXXXXXXXXX" \
+  --document-name "AWS-RunShellScript" \
+  --parameters '{"commands":[
+    "CAPTURE_FILE=/tmp/capture-tls-$(date +%Y%m%d-%H%M%S).pcap",
+    "S3_BUCKET=pcap-analyzer-storage-YOUR_ACCOUNT_ID",
+    "timeout 120 tcpdump -i eth0 -w $CAPTURE_FILE -s 0 tcp port 443 2>/dev/null || true",
+    "aws s3 cp $CAPTURE_FILE s3://$S3_BUCKET/captures/tls/ --region us-east-1",
+    "rm -f $CAPTURE_FILE"
+  ]}' \
+  --region us-east-1
+
+# Check command status
+aws ssm get-command-invocation \
+  --command-id "COMMAND_ID" \
+  --instance-id "i-XXXXXXXXXXXXXXXXX" \
+  --region us-east-1
+```
+
+> **SSM Prerequisite**: EC2 instances must have SSM Agent running (pre-installed on Amazon Linux 2/2023) and the instance IAM role must have `AmazonSSMManagedInstanceCore` + `s3:PutObject` on the PCAP bucket.
+
+| | Manual Upload | SSM Run Command |
+|---|---|---|
+| **Best for** | Existing captures, offline analysis | Live troubleshooting |
+| **SSH/inbound ports** | Not needed | Not needed |
+| **Real-time capture** | No | Yes |
+
+---
+
+#### Step 8: Test the Integration
+
+```bash
+# Get Cognito access token
 TOKEN=$(curl -s -X POST \
   https://pcap-analyzer-auth.auth.us-east-1.amazoncognito.com/oauth2/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=client_credentials&client_id=YOUR_CLIENT_ID&client_secret=YOUR_SECRET&scope=pcap-analyzer/read" \
   | jq -r '.access_token')
 
-# 2. List available MCP tools via AgentCore Gateway
+# List available MCP tools via AgentCore Gateway
 curl -X POST https://YOUR_AGENTCORE_ENDPOINT/mcp \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}'
-
-# 3. In Kiro, the server is automatically available
-# Use tools naturally through your AI agent:
-# "Analyze bgp.pcap and explain the BGP connection failure"
 ```
-
----
 
 #### Lambda Considerations
 
 | Consideration | Details |
 |--------------|---------|
 | **Storage** | Lambda has 512MB `/tmp` — suitable for analysis, limited for capture |
-| **Timeout** | Set appropriate timeout (max 900s) based on analysis complexity |
+| **Timeout** | Max 900s; set based on analysis complexity (recommend 300s default) |
 | **Memory** | Recommend 1024MB+ for large PCAP files |
 | **Capture** | Live packet capture not supported in Lambda (analysis only) |
 | **tshark** | Must be provided via Lambda layer (not included in base runtime) |
-| **Cold Start** | First invocation may be slower; use Provisioned Concurrency for latency-sensitive use cases |
-| **Token Expiry** | Cognito tokens expire in 1 hour by default; implement token refresh in client |
+| **Cold Start** | Use Provisioned Concurrency for latency-sensitive deployments |
+| **Token Expiry** | Cognito tokens expire in 1 hour; implement token refresh in client |
+
+---
 
 ### Option 4: Manual Installation
 
@@ -642,6 +559,8 @@ uv run awslabs.pcap-analyzer-mcp-server
 
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
+> **Note**: Add `C:\Program Files\Wireshark` to `ALLOWED_TSHARK_DIRS` in `server.py`.
+
 ```json
 {
   "mcpServers": {
@@ -650,8 +569,7 @@ uv run awslabs.pcap-analyzer-mcp-server
       "args": ["awslabs.pcap-analyzer-mcp-server@latest"],
       "env": {
         "WIRESHARK_PATH": "C:\\Program Files\\Wireshark\\tshark.exe"
-      },
-      "__comment": "You must add 'C:\\Program Files\\Wireshark' to ALLOWED_TSHARK_DIRS in server.py"
+      }
     }
   }
 }
@@ -678,18 +596,15 @@ Edit `~/.aws/amazonq/mcp.json`:
 |----------|-------------|---------|
 | `PCAP_STORAGE_DIR` | Directory for storing captured PCAP files | `./pcap_storage` |
 | `MAX_CAPTURE_DURATION` | Maximum capture duration in seconds | `3600` |
-| `WIRESHARK_PATH` | Path to tshark executable. Must resolve to an allowed directory (see below) | `tshark` |
+| `WIRESHARK_PATH` | Path to tshark executable | `tshark` |
 
 #### `WIRESHARK_PATH` Security Validation
 
-For security, the tshark executable path is validated at startup against an allowlist of known-safe directories:
+The tshark executable path is validated at startup against an allowlist of safe directories:
 
-- `/usr/bin`
-- `/usr/local/bin`
-- `/opt/homebrew/bin`
-- `/snap/bin`
+- `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/snap/bin`
 
-If your tshark is installed in a different directory (e.g., `/opt/bin` for Lambda layers, or `C:\Program Files\Wireshark\` on Windows), update the `ALLOWED_TSHARK_DIRS` list in `server.py` to include your installation path.
+If your tshark is in a different location (e.g., `/opt/bin` for Lambda layers, or `C:\Program Files\Wireshark\` on Windows), add it to `ALLOWED_TSHARK_DIRS` in `server.py`.
 
 ## Tools
 
@@ -804,20 +719,17 @@ The server examines BGP OPEN messages, AS numbers, connection lifecycle, and ide
 # Verify installation
 tshark --version
 
-# Check where tshark is installed
-which tshark
-
 # Install if missing
 brew install wireshark              # macOS
 sudo apt-get install tshark         # Linux
 # Windows: Download from wireshark.org and add to PATH
 ```
 
-If tshark is installed but you see `tshark path ... is not in allowed directories`, add your tshark's parent directory to the `ALLOWED_TSHARK_DIRS` list in `server.py`.
+If tshark is installed but you see `tshark path ... is not in allowed directories`, add your tshark's parent directory to `ALLOWED_TSHARK_DIRS` in `server.py`.
 </details>
 
 <details>
-<summary><b>Permission denied</b></summary>
+<summary><b>Permission denied during capture</b></summary>
 
 **macOS**: `sudo dseditgroup -o edit -a $(whoami) -t user access_bpf` (restart required)
 
@@ -830,8 +742,7 @@ If tshark is installed but you see `tshark path ... is not in allowed directorie
 <summary><b>PCAP file not found</b></summary>
 
 - List files with `list_captured_files`
-- Use relative path: `bgp.pcap`
-- Or absolute path: `/full/path/file.pcap`
+- Use relative path: `bgp.pcap` or absolute path: `/full/path/file.pcap`
 - Verify `.pcap` extension
 </details>
 
@@ -842,156 +753,6 @@ If tshark is installed but you see `tshark path ... is not in allowed directorie
 - Display filter may be too restrictive
 - Run basic analysis first: `analyze_pcap_file`
 </details>
-
-## PCAP Ingestion via SSM
-
-When using the **cloud deployment** (AgentCore Gateway + Lambda), you need to get PCAP files into S3 so the Lambda function can analyze them. There are two approaches:
-
-### Option A: Manual Upload to S3
-
-Upload `.pcap` files you already have to the S3 bucket:
-
-```bash
-# Create the S3 bucket (one-time setup)
-aws s3 mb s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID --region us-east-1
-
-# Upload a single PCAP file
-aws s3 cp capture.pcap s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/
-
-# Upload all PCAP files from a directory
-aws s3 cp ./pcap_files/ s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/ --recursive --include "*.pcap"
-
-# Verify upload
-aws s3 ls s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/
-```
-
-This approach is ideal when:
-- You already have `.pcap` files captured offline (e.g., from Wireshark, tcpdump, or network appliances)
-- You are doing post-incident forensic analysis
-- You have existing packet captures from other tools you want to analyze
-
----
-
-### Option B: Active Troubleshooting via AWS SSM Run Command
-
-Use **AWS Systems Manager (SSM) Run Command** to remotely capture packets on live EC2 instances and automatically upload them to S3 — without needing SSH access or open inbound ports.
-
-#### Prerequisites for SSM Capture
-
-1. The EC2 instance must have the **SSM Agent** installed and running (pre-installed on Amazon Linux 2, Amazon Linux 2023, and recent Ubuntu/Windows AMIs)
-2. The EC2 instance's IAM role must have `AmazonSSMManagedInstanceCore` permissions
-3. The IAM role must also allow `s3:PutObject` on the PCAP storage bucket
-
-```bash
-# Verify SSM connectivity
-aws ssm describe-instance-information \
-  --filters Key=InstanceIds,Values=i-XXXXXXXXXXXXXXXXX
-
-# Attach SSM policy to instance role (if not already attached)
-aws iam attach-role-policy \
-  --role-name YOUR_EC2_INSTANCE_ROLE \
-  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-```
-
-#### Capture Packets on a Remote EC2 Instance via SSM
-
-```bash
-# Run tcpdump on EC2 instance for 60 seconds and upload to S3
-aws ssm send-command \
-  --instance-ids "i-XXXXXXXXXXXXXXXXX" \
-  --document-name "AWS-RunShellScript" \
-  --parameters '{"commands":[
-    "CAPTURE_FILE=/tmp/capture-$(date +%Y%m%d-%H%M%S).pcap",
-    "S3_BUCKET=pcap-analyzer-storage-YOUR_ACCOUNT_ID",
-    "timeout 60 tcpdump -i any -w $CAPTURE_FILE -s 0 2>/dev/null || true",
-    "aws s3 cp $CAPTURE_FILE s3://$S3_BUCKET/captures/ --region us-east-1",
-    "echo Upload complete: $CAPTURE_FILE",
-    "rm -f $CAPTURE_FILE"
-  ]}' \
-  --comment "PCAP capture for network troubleshooting" \
-  --region us-east-1
-
-# Note the CommandId from the output
-```
-
-#### Capture with a Specific Filter (e.g., TCP port 443 only)
-
-```bash
-aws ssm send-command \
-  --instance-ids "i-XXXXXXXXXXXXXXXXX" \
-  --document-name "AWS-RunShellScript" \
-  --parameters '{"commands":[
-    "CAPTURE_FILE=/tmp/capture-tls-$(date +%Y%m%d-%H%M%S).pcap",
-    "S3_BUCKET=pcap-analyzer-storage-YOUR_ACCOUNT_ID",
-    "timeout 120 tcpdump -i eth0 -w $CAPTURE_FILE -s 0 tcp port 443 2>/dev/null || true",
-    "aws s3 cp $CAPTURE_FILE s3://$S3_BUCKET/captures/tls/ --region us-east-1",
-    "rm -f $CAPTURE_FILE"
-  ]}' \
-  --region us-east-1
-```
-
-#### Check Command Status
-
-```bash
-# Check if the capture command completed
-aws ssm get-command-invocation \
-  --command-id "COMMAND_ID_FROM_ABOVE" \
-  --instance-id "i-XXXXXXXXXXXXXXXXX" \
-  --region us-east-1
-```
-
-#### List Captured Files in S3
-
-```bash
-# List all captured files
-aws s3 ls s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/ --recursive
-
-# Get the most recent capture
-aws s3 ls s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/ \
-  --recursive | sort | tail -5
-```
-
-#### Tell the MCP Agent to Analyze the Capture
-
-Once the capture is in S3, instruct your DevOps agent:
-
-```
-"Download s3://pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/capture-20240226-143022.pcap 
- and analyze it for TLS handshake failures"
-```
-
-#### IAM Permissions Required for SSM Capture
-
-The EC2 instance's IAM role needs:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:PutObjectAcl"
-      ],
-      "Resource": "arn:aws:s3:::pcap-analyzer-storage-YOUR_ACCOUNT_ID/captures/*"
-    }
-  ]
-}
-```
-
-#### Comparison: Manual Upload vs SSM
-
-| | Manual Upload | SSM Run Command |
-|---|---|---|
-| **Use case** | Existing captures, offline analysis | Live troubleshooting, no SSH needed |
-| **Access required** | AWS CLI / Console | SSM Agent on instance |
-| **Inbound ports** | None | None (SSM uses outbound HTTPS) |
-| **Real-time** | No | Yes (captures live traffic) |
-| **Automation** | Script with `aws s3 cp` | `aws ssm send-command` |
-| **Cost** | S3 storage only | S3 + SSM API calls (free tier available) |
-
----
 
 ## Development
 
@@ -1020,14 +781,3 @@ Apache License 2.0 - see [LICENSE](LICENSE) file.
 
 Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
----
-
-<div align="center">
-
-**Part of [AWS Labs MCP Servers](https://github.com/awslabs/mcp)**
-
-[Documentation](https://awslabs.github.io/mcp/servers/pcap-analyzer-mcp-server/) •
-[Report Bug](https://github.com/awslabs/mcp/issues) •
-[Request Feature](https://github.com/awslabs/mcp/discussions)
-
-</div>
