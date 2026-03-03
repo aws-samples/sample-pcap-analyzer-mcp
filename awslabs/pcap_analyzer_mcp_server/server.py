@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import psutil
-import shutil
 import time
 from datetime import datetime
 from mcp.server import Server
@@ -41,50 +40,7 @@ logger = logging.getLogger(__name__)
 # Global configuration
 PCAP_STORAGE_DIR = os.getenv('PCAP_STORAGE_DIR', './pcap_storage')
 MAX_CAPTURE_DURATION = int(os.getenv('MAX_CAPTURE_DURATION', '3600'))
-_WIRESHARK_PATH_RAW = os.getenv('WIRESHARK_PATH', 'tshark')
-
-ALLOWED_TSHARK_NAMES = ['tshark']
-ALLOWED_TSHARK_DIRS = ['/usr/bin', '/usr/local/bin', '/opt/homebrew/bin', '/snap/bin']
-
-
-def _resolve_tshark_path() -> str:
-    """Resolve and validate tshark executable path at startup.
-
-    Security: Validates the configured tshark path against an allowlist
-    of known-safe executable names and directories to prevent arbitrary
-    command execution.
-
-    On macOS with Homebrew, shutil.which() returns a symlink like
-    /opt/homebrew/bin/tshark that points to a Cellar path. We validate
-    the directory of the resolved which() path (the symlink location),
-    not the deep realpath, since the symlink directory is the known-safe
-    location managed by the package manager.
-    """
-    configured = _WIRESHARK_PATH_RAW
-
-    # If bare command name, resolve via PATH
-    if '/' not in configured:
-        if configured not in ALLOWED_TSHARK_NAMES:
-            raise RuntimeError(f'Disallowed tshark executable name: {configured}')
-        resolved = shutil.which(configured)
-        if not resolved:
-            raise RuntimeError('tshark not found in PATH. Install Wireshark/tshark or set WIRESHARK_PATH.')
-        configured = resolved
-
-    # Validate the directory of the path (before symlink resolution)
-    # This handles Homebrew symlinks: /opt/homebrew/bin/tshark -> /opt/homebrew/Cellar/...
-    parent_dir = os.path.dirname(os.path.abspath(configured))
-    if parent_dir not in ALLOWED_TSHARK_DIRS:
-        raise RuntimeError(
-            f'tshark directory {parent_dir} is not in allowed directories: {ALLOWED_TSHARK_DIRS}. '
-            f'Update ALLOWED_TSHARK_DIRS if your tshark is installed elsewhere.'
-        )
-
-    # Return the real path for actual execution
-    return os.path.realpath(configured)
-
-
-TSHARK_PATH = _resolve_tshark_path()
+WIRESHARK_PATH = os.getenv('WIRESHARK_PATH', 'tshark')
 
 # Ensure storage directory exists
 Path(PCAP_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
@@ -674,75 +630,26 @@ class PCAPAnalyzerServer:
                 logger.error(f'Error in tool {name}: {str(e)}')
                 return [TextContent(type='text', text=f'Error: {str(e)}')]
 
-    def _sanitize_tshark_argument(self, arg: str) -> str:
-        """
-        Sanitize tshark argument with comprehensive validation.
-        
-        This function validates and sanitizes arguments for tshark commands.
-        It returns the validated argument unchanged because shell=False provides
-        the primary security control - no quoting needed or desired.
-        
-        Security Controls:
-        1. Type validation (must be string)
-        2. Length validation (max 4096 chars)
-        3. Character allowlist (alphanumeric + safe punctuation)
-        4. Dangerous shell metacharacter blocklist
-        
-        Returns:
-            str: The validated argument (unmodified)
-            
-        Raises:
-            ValueError: If argument fails any validation check
-        """
-        import string
-        
-        # Type validation
-        if not isinstance(arg, str):
-            raise ValueError(f'Invalid argument type: {type(arg)}')
-        
-        # Length validation
-        if len(arg) > 4096:
-            raise ValueError(f'Argument too long: {len(arg)} characters')
-        
-        # Character allowlist - includes chars needed for display filters
-        allowed_chars = string.ascii_letters + string.digits + '.,_-:/=()!<> \t'
-        if not all(c in allowed_chars for c in arg):
-            raise ValueError(f'Argument contains disallowed characters: {arg}')
-        
-        # Explicit blocklist for dangerous shell metacharacters
-        # Note: parentheses and comparison operators allowed for display filters
-        dangerous_chars = [';', '&', '|', '`', '$', '\x00', '\n', '\r', '{', '}', '"', "'", '\\', '*', '?', '[', ']']
-        if any(char in arg for char in dangerous_chars):
-            raise ValueError(f'Argument contains shell metacharacters: {arg}')
-        
-        # Return validated argument unchanged (no quoting - would break display filters)
-        return arg
-
     async def _run_tshark_command(self, args: List[str]) -> str:
-        """
-        Run tshark command with comprehensive input validation and security checks.
-        
-        Security Model (defense-in-depth):
-        1. Executable path validated against allowlist at startup (_resolve_tshark_path)
-        2. All arguments sanitized via _sanitize_tshark_argument() with character
-           allowlist + dangerous metacharacter blocklist
-        3. shell=False ensures arguments passed directly to execve(), no shell interpretation
-        """
+        """Run tshark command with input validation and security checks."""
         try:
-            # Security: Sanitize all arguments through dedicated validation function
-            safe_args = [self._sanitize_tshark_argument(arg) for arg in args]
+            # Security: Validate wireshark path is safe
+            if not WIRESHARK_PATH or not isinstance(WIRESHARK_PATH, str):
+                raise ValueError('Invalid WIRESHARK_PATH configuration')
 
-            # Build command with validated arguments (no shlex.quote - not needed for shell=False)
-            cmd = [TSHARK_PATH] + safe_args
+            # Security: Sanitize command arguments
+            safe_args = []
+            for arg in args:
+                if not isinstance(arg, str):
+                    raise ValueError(f'Invalid argument type: {type(arg)}')
+                # Remove potentially dangerous characters
+                if any(char in arg for char in [';', '&', '|', '`', '$']):
+                    raise ValueError(f'Potentially unsafe argument: {arg}')
+                safe_args.append(arg)
 
-            # Security: Command injection mitigated via defense-in-depth:
-            # 1. Executable path validated against allowlist at startup (_resolve_tshark_path)
-            # 2. All arguments validated via _sanitize_tshark_argument() with character allowlist + blocklist
-            # 3. shell=False - arguments passed directly to execve(), no shell interpretation
-            result = await asyncio.create_subprocess_exec(  # nosemgrep: dangerous-asyncio-create-exec-tainted-env-args, dangerous-asyncio-create-exec-audit
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            cmd = [WIRESHARK_PATH] + safe_args
+            result = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await result.communicate()
 
@@ -809,62 +716,59 @@ class PCAPAnalyzerServer:
         except Exception as e:
             return [TextContent(type='text', text=f'Error listing interfaces: {str(e)}')]
 
-    def _sanitize_capture_interface(self, interface: str) -> str:
-        """
-        Sanitize network interface name with strict validation.
-        
-        Returns validated interface name (unquoted - quoting done at command building).
-        """
-        import re
-        
-        if not isinstance(interface, str):
-            raise ValueError('Interface must be a string')
-        if len(interface) > 64:
-            raise ValueError('Interface name too long')
-        if not re.match(r'^[a-zA-Z0-9._-]+$', interface):
-            raise ValueError(f'Invalid interface name format: {interface}')
-        
-        return interface
-    
-    def _sanitize_capture_filter(self, capture_filter: str) -> str:
-        """
-        Sanitize BPF capture filter with validation.
-        
-        Returns validated filter (unquoted - quoting done at command building).
-        """
+    def _validate_interface(self, interface: str) -> str:
+        """Validate network interface against available system interfaces."""
         import string
-        
-        if not isinstance(capture_filter, str):
-            raise ValueError('Capture filter must be a string')
-        if len(capture_filter) > 1024:
-            raise ValueError('Capture filter too long')
-        
-        # BPF filters should only contain safe characters
-        allowed_chars = string.ascii_letters + string.digits + ' ()[]{}.<>=!&|'
-        if not all(c in allowed_chars for c in capture_filter):
-            raise ValueError(f'Invalid characters in capture filter')
-        
+
+        # Allow only safe characters in interface names
+        allowed_chars = string.ascii_letters + string.digits + '-_.'
+        if not all(c in allowed_chars for c in interface):
+            raise ValueError(f'Invalid characters in interface name: {interface!r}')
+
+        # Allowlist check: interface must be one of the available system interfaces
+        available = set(psutil.net_if_addrs().keys())
+        if interface not in available:
+            raise ValueError(
+                f'Interface {interface!r} not found. Available interfaces: {sorted(available)}'
+            )
+        return interface
+
+    def _validate_capture_filter(self, capture_filter: str) -> str:
+        """Validate BPF capture filter expression for safety."""
+        # Reject shell metacharacters that could be injected
+        dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '\n', '\r', '\x00']
+        for char in dangerous_chars:
+            if char in capture_filter:
+                raise ValueError(
+                    f'Invalid character {char!r} in capture filter. '
+                    'Only BPF filter expressions are allowed.'
+                )
+
+        # Enforce a reasonable length limit
+        if len(capture_filter) > 512:
+            raise ValueError('Capture filter expression is too long (max 512 characters)')
+
         return capture_filter
-    
+
     def _sanitize_output_filename(self, output_file: str) -> str:
-        """
-        Sanitize output filename with validation.
-        
-        Returns full validated path (unquoted - quoting done at command building).
-        """
-        import re
-        
-        if not isinstance(output_file, str):
-            raise ValueError('Output file must be a string')
-        if len(output_file) > 255:
-            raise ValueError('Output filename too long')
+        """Sanitize output filename using the same rules as _resolve_pcap_path."""
+        import string
+
+        # Must end with .pcap
         if not output_file.endswith('.pcap'):
-            raise ValueError('Output file must end with .pcap')
-        if not re.match(r'^[a-zA-Z0-9._-]+\.pcap$', output_file):
-            raise ValueError(f'Invalid output filename: {output_file}')
-        
-        output_path = os.path.join(PCAP_STORAGE_DIR, output_file)
-        return output_path
+            raise ValueError('Output filename must have a .pcap extension')
+
+        # Prevent path traversal
+        if '../' in output_file or '/..' in output_file or output_file.startswith('/'):
+            raise ValueError('Path traversal or absolute paths are not allowed in output filename')
+
+        # Only allow safe characters (no directory separators beyond a flat filename)
+        allowed_chars = string.ascii_letters + string.digits + '.-_'
+        basename = os.path.basename(output_file)
+        if not all(c in allowed_chars for c in basename):
+            raise ValueError(f'Invalid characters in output filename: {basename!r}')
+
+        return basename
 
     async def _start_packet_capture(
         self,
@@ -875,38 +779,30 @@ class PCAPAnalyzerServer:
     ) -> List[TextContent]:
         """Start packet capture on specified interface."""
         try:
-            # Validate duration
-            if not isinstance(duration, int) or duration < 1 or duration > MAX_CAPTURE_DURATION:
-                raise ValueError(f'Invalid duration: must be 1-{MAX_CAPTURE_DURATION} seconds')
-            
-            # Generate safe capture ID and filename
+            # Security: Validate interface against available system interfaces
+            interface = self._validate_interface(interface)
+
+            # Security: Validate BPF capture filter syntax
+            if capture_filter is not None:
+                capture_filter = self._validate_capture_filter(capture_filter)
+
+            # Generate capture ID and sanitize output filename
             capture_id = f'capture_{int(time.time())}'
             if not output_file:
                 output_file = f'{capture_id}.pcap'
-            
-            # Security: Sanitize all inputs through dedicated validation functions
-            safe_interface = self._sanitize_capture_interface(interface)
-            safe_output_path = self._sanitize_output_filename(output_file)
-            
-            # Get unquoted path for storage
-            output_path = os.path.join(PCAP_STORAGE_DIR, output_file)
-            
-            # Build tshark command with sanitized arguments (no shlex.quote - not needed for shell=False)
-            cmd = [TSHARK_PATH, '-i', safe_interface, '-w', safe_output_path]
-            if capture_filter:
-                safe_filter = self._sanitize_capture_filter(capture_filter)
-                cmd.extend(['-f', safe_filter])
 
-            # Security: Command injection mitigated via defense-in-depth:
-            # 1. Executable path validated against allowlist at startup (_resolve_tshark_path)
-            # 2. Interface validated via _sanitize_capture_interface() (regex allowlist)
-            # 3. Output path validated via _sanitize_output_filename() (regex allowlist, .pcap only)
-            # 4. Capture filter validated via _sanitize_capture_filter() (character allowlist)
-            # 5. shell=False - arguments passed directly to execve(), no shell interpretation
-            process = await asyncio.create_subprocess_exec(  # nosemgrep: dangerous-asyncio-create-exec-tainted-env-args, dangerous-asyncio-create-exec-audit
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            # Security: Sanitize output filename (prevent path traversal)
+            safe_filename = self._sanitize_output_filename(output_file)
+            output_path = os.path.join(PCAP_STORAGE_DIR, safe_filename)
+
+            # Build tshark command
+            cmd = [WIRESHARK_PATH, '-i', interface, '-w', output_path]
+            if capture_filter:
+                cmd.extend(['-f', capture_filter])
+
+            # Start capture process
+            process = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             # Store capture info
@@ -976,9 +872,9 @@ class PCAPAnalyzerServer:
 
             # Build analysis command based on type
             if analysis_type == 'summary':
-                args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'io,phs']
+                args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'proto,colinfo']
             elif analysis_type == 'protocols':
-                args = ['-r', pcap_path, '-q', '-z', 'io,phs']
+                args = ['-r', pcap_path, '-q', '-z', 'proto,colinfo']
             elif analysis_type == 'conversations':
                 args = ['-r', pcap_path, '-q', '-z', 'conv,tcp', '-z', 'conv,udp']
             else:
@@ -1117,11 +1013,11 @@ class PCAPAnalyzerServer:
         try:
             pcap_path = self._resolve_pcap_path(pcap_file)
 
-            # Build search filter (Wireshark contains operator doesn't need quotes)
+            # Build search filter
             if case_sensitive:
-                filter_expr = f'frame contains {search_pattern}'
+                filter_expr = f'frame contains "{search_pattern}"'
             else:
-                filter_expr = f'frame contains {search_pattern.lower()}'
+                filter_expr = f'frame contains "{search_pattern.lower()}"'
 
             args = ['-r', pcap_path, '-Y', filter_expr, '-c', str(limit)]
 
