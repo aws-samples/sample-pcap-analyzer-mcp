@@ -771,11 +771,9 @@ uv run awslabs.pcap-analyzer-mcp-server
 uv run pytest
 ```
 
-## Contributors
+## Contributing
 
-| Name | GitHub |
-|------|--------|
-| Vamsi Manthapuram | [@vkmanthapuram](https://github.com/vkmanthapuram) |
+We welcome community contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
