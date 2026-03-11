@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![smithy-badge](https://img.shields.io/badge/Smithy-PCAP%20Analyzer-8A2BE2)](https://github.com/awslabs/mcp)
+[![smithy-badge](https://img.shields.io/badge/Smithy-PCAP%20Analyzer-8A2BE2)](https://github.com/aws-samples/sample-pcap-analyzer-mcp)
 [![PyPI](https://img.shields.io/pypi/v/awslabs.pcap-analyzer-mcp-server.svg)](https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/)
 [![License](https://img.shields.io/badge/License-MIT--0-blue.svg)](LICENSE)
 
@@ -534,8 +534,8 @@ pip install awslabs.pcap-analyzer-mcp-server
 awslabs.pcap-analyzer-mcp-server
 
 # From source
-git clone https://github.com/awslabs/mcp.git
-cd mcp/src/pcap-analyzer-mcp-server
+git clone https://github.com/aws-samples/sample-pcap-analyzer-mcp.git
+cd sample-pcap-analyzer-mcp
 uv sync
 uv run awslabs.pcap-analyzer-mcp-server
 ```
@@ -758,8 +758,8 @@ If tshark is installed but you see `tshark path ... is not in allowed directorie
 
 ```bash
 # Clone repository
-git clone https://github.com/awslabs/mcp.git
-cd mcp/src/pcap-analyzer-mcp-server
+git clone https://github.com/aws-samples/sample-pcap-analyzer-mcp.git
+cd sample-pcap-analyzer-mcp
 
 # Install dependencies
 uv sync
