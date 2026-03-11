@@ -4,7 +4,7 @@
 
 [![smithy-badge](https://img.shields.io/badge/Smithy-PCAP%20Analyzer-8A2BE2)](https://github.com/awslabs/mcp)
 [![PyPI](https://img.shields.io/pypi/v/awslabs.pcap-analyzer-mcp-server.svg)](https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT--0-blue.svg)](LICENSE)
 
 A Model Context Protocol (MCP) server for comprehensive network packet capture and analysis using Wireshark/tshark.
 
@@ -773,7 +773,11 @@ uv run pytest
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) file.
+This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
+
+## Disclaimer
+
+The sample code is provided without any guarantees, and you're not recommended to use it for production-grade workloads. The intention is to provide content to build and learn. Be sure of reading the licensing terms.
 
 Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
