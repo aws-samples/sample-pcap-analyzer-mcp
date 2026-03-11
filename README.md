@@ -771,6 +771,12 @@ uv run awslabs.pcap-analyzer-mcp-server
 uv run pytest
 ```
 
+## Contributors
+
+| Name | GitHub |
+|------|--------|
+| Vamsi Manthapuram | [@vkmanthapuram](https://github.com/vkmanthapuram) |
+
 ## License
 
 This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
