@@ -17,7 +17,7 @@ A Model Context Protocol (MCP) server for comprehensive network packet capture a
 
 ## Overview
 
-This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **31 specialized tools** across 8 categories for deep network analysis, troubleshooting, and security assessment.
+This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **31 specialized tools** across 8 categories for deep network analysis, troubleshooting, and security assessment. More tools are work in progress.
 
 ### Architecture
 
