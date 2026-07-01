@@ -1,0 +1,112 @@
+name: Collect Repository Traffic Stats
+
+on:
+  schedule:
+    # Runs every Monday at 00:00 UTC (weekly)
+    - cron: "0 0 * * 1"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  traffic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: traffic
+          fetch-depth: 0
+
+      - name: Collect traffic data
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p traffic
+
+          DATE=$(date -u +"%Y-%m-%d")
+
+          echo "=== Collecting traffic data for $REPO on $DATE ==="
+
+          # Get clones (last 14 days)
+          echo "Fetching clones..."
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/traffic/clones?per=day" \
+            > traffic/clones_latest.json
+
+          # Get views (last 14 days)
+          echo "Fetching views..."
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/traffic/views?per=day" \
+            > traffic/views_latest.json
+
+          # Get top referrers
+          echo "Fetching referrers..."
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/traffic/popular/referrers" \
+            > traffic/referrers_latest.json
+
+          # Get top paths
+          echo "Fetching popular paths..."
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/traffic/popular/paths" \
+            > traffic/paths_latest.json
+
+          # Append clones to historical CSV
+          if [ ! -f traffic/clones_history.csv ]; then
+            echo "date,count,uniques" > traffic/clones_history.csv
+          fi
+
+          # Parse daily clone data and append new entries
+          jq -r '.clones[] | "\(.timestamp | split("T")[0]),\(.count),\(.uniques)"' \
+            traffic/clones_latest.json | while read line; do
+            DATE_ENTRY=$(echo "$line" | cut -d',' -f1)
+            if ! grep -q "^$DATE_ENTRY" traffic/clones_history.csv 2>/dev/null; then
+              echo "$line" >> traffic/clones_history.csv
+            fi
+          done
+
+          # Append views to historical CSV
+          if [ ! -f traffic/views_history.csv ]; then
+            echo "date,count,uniques" > traffic/views_history.csv
+          fi
+
+          jq -r '.views[] | "\(.timestamp | split("T")[0]),\(.count),\(.uniques)"' \
+            traffic/views_latest.json | while read line; do
+            DATE_ENTRY=$(echo "$line" | cut -d',' -f1)
+            if ! grep -q "^$DATE_ENTRY" traffic/views_history.csv 2>/dev/null; then
+              echo "$line" >> traffic/views_history.csv
+            fi
+          done
+
+          # Append referrers snapshot
+          if [ ! -f traffic/referrers_history.csv ]; then
+            echo "collected_date,referrer,count,uniques" > traffic/referrers_history.csv
+          fi
+
+          jq -r --arg date "$DATE" '.[] | "\($date),\(.referrer),\(.count),\(.uniques)"' \
+            traffic/referrers_latest.json >> traffic/referrers_history.csv
+
+          # Generate summary
+          TOTAL_CLONES=$(jq '.count' traffic/clones_latest.json)
+          UNIQUE_CLONES=$(jq '.uniques' traffic/clones_latest.json)
+          TOTAL_VIEWS=$(jq '.count' traffic/views_latest.json)
+          UNIQUE_VIEWS=$(jq '.uniques' traffic/views_latest.json)
+
+          echo ""
+          echo "=== Traffic Summary (last 14 days) ==="
+          echo "Clones: $TOTAL_CLONES total, $UNIQUE_CLONES unique"
+          echo "Views: $TOTAL_VIEWS total, $UNIQUE_VIEWS unique"
+
+      - name: Commit traffic data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add traffic/
+          git diff --staged --quiet || git commit -m "Update traffic data $(date -u +%Y-%m-%d)"
+          git push
