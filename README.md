@@ -17,7 +17,7 @@ A Model Context Protocol (MCP) server for comprehensive network packet capture a
 
 ## Overview
 
-This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **31 specialized tools** across 8 categories for deep network analysis, troubleshooting, and security assessment. More tools are work in progress.
+This MCP server enables AI models to perform sophisticated network packet capture and analysis. It provides **46 specialized tools** across 11 categories for deep network analysis, troubleshooting, and security assessment.
 
 ### Architecture
 
@@ -134,10 +134,11 @@ graph TB
 ### Key Capabilities
 
 - 🔧 Network interface discovery and live packet capture
-- 📊 Comprehensive protocol analysis (TCP, TLS, BGP, DNS, HTTP)
-- 🔒 Security analysis (TLS handshakes, certificate validation, threat detection)
-- ⚡ Performance metrics (latency, throughput, bandwidth, quality)
-- 🔍 Protocol-specific troubleshooting and expert analysis
+- 📊 Comprehensive protocol analysis (TCP, TLS, QUIC/HTTP3, BGP, DNS, HTTP)
+- 🔒 Security analysis (TLS handshakes, PQC detection, ARP spoofing, DNS tunneling, credential exposure)
+- ⚡ Performance metrics (latency, throughput, bandwidth, connection reuse, quality)
+- 🔍 Advanced diagnostics (MTU/fragmentation, connection timeouts, out-of-order packets)
+- 🌐 Network intelligence (Geo/ASN mapping, ICMP error classification, TCP reset analysis)
 
 ## Prerequisites
 
@@ -608,7 +609,7 @@ If your tshark is in a different location (e.g., `/opt/bin` for Lambda layers, o
 
 ## Tools
 
-This server provides 31 tools organized into 8 categories:
+This server provides 46 tools organized into 11 categories:
 
 <details>
 <summary><b>Network Interface Management (1 tool)</b></summary>
@@ -644,12 +645,12 @@ This server provides 31 tools organized into 8 categories:
 <details>
 <summary><b>TLS/SSL Security Analysis (6 tools)</b></summary>
 
-- `analyze_tls_handshakes` - Analyze TLS handshakes including SNI, certificate details
+- `analyze_tls_handshakes` - Analyze TLS handshakes including SNI, key exchange groups, and Post-Quantum Cryptography (PQC) detection
 - `analyze_sni_mismatches` - Analyze SNI mismatches and correlate with connection resets
 - `extract_certificate_details` - Extract SSL certificate details and validate against SNI
 - `analyze_tls_alerts` - Analyze TLS alert messages that indicate handshake failures
 - `analyze_connection_lifecycle` - Analyze complete connection lifecycle from SYN to FIN/RST
-- `extract_tls_cipher_analysis` - Analyze TLS cipher suite negotiations and compatibility issues
+- `extract_tls_cipher_analysis` - Analyze TLS cipher suite negotiations, key exchange groups, and PQC algorithm usage
 </details>
 
 <details>
@@ -679,6 +680,41 @@ This server provides 31 tools organized into 8 categories:
 - `analyze_bandwidth_utilization` - Analyze bandwidth utilization and traffic patterns
 - `analyze_application_response_times` - Analyze application layer response times and performance
 - `analyze_network_quality_metrics` - Analyze network quality metrics including jitter and packet loss
+</details>
+
+<details>
+<summary><b>Network Diagnostics (6 tools)</b></summary>
+
+- `analyze_mtu_fragmentation` - Analyze MTU/fragmentation issues including Path MTU discovery failures and ICMP "packet too big" messages
+- `analyze_tcp_resets` - Analyze TCP connection resets with context: who sent the reset, connection refused detection
+- `analyze_duplicate_acks` - Analyze duplicate ACKs and fast retransmit patterns to distinguish real loss from reordering
+- `analyze_icmp_errors` - Analyze ICMP error messages: destination unreachable, TTL exceeded, redirects
+- `analyze_connection_timeouts` - Detect connection timeouts: unanswered SYNs, idle timeouts, half-open connections
+- `analyze_out_of_order_packets` - Detect TCP out-of-order packets indicating network path issues
+</details>
+
+<details>
+<summary><b>Protocol & Stream Analysis (3 tools)</b></summary>
+
+- `analyze_quic_traffic` - Analyze QUIC/HTTP3 traffic: connection IDs, handshake failures, version negotiation, connection migration
+- `follow_tcp_stream` - Reassemble and follow a TCP stream by stream index
+- `follow_udp_stream` - Reassemble and follow a UDP stream by stream index
+</details>
+
+<details>
+<summary><b>Security Detection (3 tools)</b></summary>
+
+- `detect_arp_spoofing` - Detect ARP spoofing: duplicate IP-to-MAC mappings, gratuitous ARP floods
+- `detect_dns_tunneling` - Detect DNS tunneling: long queries, TXT abuse, subdomain entropy, beaconing
+- `extract_credentials` - Detect plaintext credentials in HTTP Basic Auth, FTP, Telnet, and SMTP AUTH
+</details>
+
+<details>
+<summary><b>Data Extraction & Intelligence (3 tools)</b></summary>
+
+- `extract_fields` - Extract arbitrary tshark fields from packets with optional display filter
+- `analyze_connection_reuse` - Analyze HTTP connection pooling: requests per connection, keep-alive effectiveness
+- `analyze_geo_asn_mapping` - Map IP addresses to ASN/organization to identify providers and CDNs
 </details>
 
 ## Usage Examples
@@ -743,7 +779,7 @@ If tshark is installed but you see `tshark path ... is not in allowed directorie
 
 - List files with `list_captured_files`
 - Use relative path: `bgp.pcap` or absolute path: `/full/path/file.pcap`
-- Verify `.pcap` extension
+- Verify `.pcap` or `.pcapng` extension
 </details>
 
 <details>
