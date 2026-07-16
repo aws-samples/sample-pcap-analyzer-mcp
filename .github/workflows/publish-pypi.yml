@@ -1,0 +1,117 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build only, skip publish"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify build artifacts
+        run: |
+          set -euo pipefail
+
+          echo "=== Built artifacts ==="
+          ls -la dist/
+
+          # Verify we have both sdist and wheel
+          WHEEL_COUNT=$(ls dist/*.whl 2>/dev/null | wc -l)
+          SDIST_COUNT=$(ls dist/*.tar.gz 2>/dev/null | wc -l)
+
+          if [[ "$WHEEL_COUNT" -eq 0 ]]; then
+            echo "::error::No wheel file found in dist/"
+            exit 1
+          fi
+
+          if [[ "$SDIST_COUNT" -eq 0 ]]; then
+            echo "::error::No sdist found in dist/"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Wheel contents (top 30) ==="
+          unzip -l dist/*.whl | head -30
+
+          echo ""
+          echo "=== Package metadata ==="
+          unzip -p dist/*.whl "*/METADATA" | head -25
+
+      - name: Test install and entry point
+        run: |
+          set -euo pipefail
+
+          # Install the built wheel
+          uv pip install dist/*.whl --system
+
+          # Verify the entry point binary exists
+          which awslabs.pcap-analyzer-mcp-server
+
+          # Verify it can be invoked (MCP servers don't have --help typically, so just check import)
+          python -c "from awslabs.pcap_analyzer_mcp_server.server import main; print('Import OK')"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/
+    permissions:
+      id-token: write  # Required for PyPI trusted publishing (OIDC)
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Verify dist contents
+        run: |
+          echo "=== Publishing these files ==="
+          ls -la dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          verbose: true
+          # Trusted Publishing (OIDC) is used by default.
+          # No API token required if trusted publisher is configured on PyPI.
+          #
+          # To use API token instead, uncomment below and add PYPI_API_TOKEN secret:
+          # password: ${{ secrets.PYPI_API_TOKEN }}

@@ -29,11 +29,11 @@ license-files = ["LICENSE", "NOTICE"]
 "awslabs.pcap-analyzer-mcp-server" = "awslabs.pcap_analyzer_mcp_server.server:main"
 
 [project.urls]
-Homepage = "https://awslabs.github.io/mcp/"
-Documentation = "https://awslabs.github.io/mcp/servers/pcap-analyzer-mcp-server/"
-Source = "https://github.com/awslabs/mcp.git"
-"Bug Tracker" = "https://github.com/awslabs/mcp/issues"
-Changelog = "https://github.com/awslabs/mcp/blob/main/src/pcap-analyzer-mcp-server/CHANGELOG.md"
+Homepage = "https://github.com/aws-samples/sample-pcap-analyzer-mcp"
+Documentation = "https://github.com/aws-samples/sample-pcap-analyzer-mcp#readme"
+Source = "https://github.com/aws-samples/sample-pcap-analyzer-mcp.git"
+"Bug Tracker" = "https://github.com/aws-samples/sample-pcap-analyzer-mcp/issues"
+Changelog = "https://github.com/aws-samples/sample-pcap-analyzer-mcp/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
