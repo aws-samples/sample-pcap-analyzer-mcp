@@ -503,21 +503,6 @@ uv run awslabs.pcap-analyzer-mcp-server
 }
 ```
 
-### Amazon Q Developer
-
-Edit `~/.aws/amazonq/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "pcap-analyzer": {
-      "command": "uvx",
-      "args": ["awslabs.pcap-analyzer-mcp-server@latest"]
-    }
-  }
-}
-```
-
 ### Environment Variables
 
 | Variable | Description | Default |
