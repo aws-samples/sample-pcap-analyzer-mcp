@@ -1,8 +1,8 @@
 [project]
 name = "awslabs.pcap-analyzer-mcp-server"
-version = "1.0.0"
+version = "1.0.1"
 description = "A Model Context Protocol server for comprehensive network packet capture and analysis using Wireshark/tshark"
-readme = "README.md"
+readme = "PYPI_README.md"
 requires-python = ">=3.10"
 authors = [
     {name = "Amazon Web Services"},
