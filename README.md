@@ -55,9 +55,9 @@ This MCP server bridges AI models and Wireshark/tshark, enabling sophisticated p
 
 Two deployment patterns are supported:
 
-#### Architecture 1: Direct MCP Client on IDE (Local)
+#### Architecture 1: Local — IDE + MCP Server + tshark
 
-Use this when running the server locally alongside your IDE (Claude Desktop, VS Code, Cursor, Kiro, Amazon Q Developer).
+Run the server locally alongside your IDE (Claude Desktop, VS Code, Cursor, Kiro, Amazon Q Developer). The AI model issues MCP tool calls, the server translates them into tshark commands, and returns structured results.
 
 ```mermaid
 graph LR
@@ -66,102 +66,108 @@ graph LR
         B[MCP Client]
     end
 
-    subgraph Local ["🖥️ Local Machine"]
-        C[PCAP Analyzer\nMCP Server]
-        D[Wireshark/tshark]
-        E[Network Interfaces]
-        F[PCAP Files\n./pcap_storage]
+    subgraph Server ["🖥️ Local Machine"]
+        C["PCAP Analyzer<br/>MCP Server"]
+        D[tshark]
     end
 
-    subgraph Ingestion ["📥 PCAP Ingestion"]
+    subgraph Data ["📁 PCAP Storage"]
+        F["./pcap_storage"]
+    end
+
+    subgraph Sources ["📥 Ingestion Sources"]
         G[Manual File Copy]
-        H[Live Capture]
+        H[Live Capture<br/>via tcpdump]
     end
 
-    A <--> B
-    B <-->|stdio / SSE| C
-    C <--> D
-    C <--> E
-    D --> F
-    E -->|Live Capture| F
-    G -->|Copy .pcap files| F
-    H -->|tcpdump / Wireshark| F
-    F --> C
+    A <-->|"MCP Protocol<br/>(tool calls + results)"| B
+    B <-->|"stdio"| C
+    C -->|"Invokes with<br/>display filters"| D
+    D -->|"Reads for analysis"| F
+    C -->|"start_packet_capture<br/>(tshark -i eth0 -w file.pcap)"| D
+    G -->|"cp file.pcap"| F
+    H -->|"tcpdump → .pcap"| F
 
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style B fill:#bbf,stroke:#333,stroke-width:2px
     style C fill:#bfb,stroke:#333,stroke-width:4px
     style D fill:#fbb,stroke:#333,stroke-width:2px
-    style E fill:#fbf,stroke:#333,stroke-width:2px
     style F fill:#dff,stroke:#333,stroke-width:2px
     style G fill:#ffd,stroke:#333,stroke-width:2px
     style H fill:#fdf,stroke:#333,stroke-width:2px
 ```
 
-#### Architecture 2: DevOps Agent with AgentCore Gateway + Lambda (Cloud)
+**Data flow:**
+1. AI agent calls a tool (e.g., `analyze_tcp_retransmissions`)
+2. MCP client sends JSON-RPC request over stdio to the server
+3. Server constructs and runs appropriate `tshark` command with display filters
+4. tshark reads the PCAP file from `./pcap_storage`, applies filters, outputs structured data
+5. Server parses tshark output and returns results to the AI model
 
-Use this for team-wide or production deployments where a DevOps agent calls the MCP server through AgentCore Gateway, with full inbound OAuth2/Cognito and outbound IAM authorization.
+For live capture, the server spawns `tshark -i <interface> -w <output.pcap>` which writes directly to the storage directory.
+
+#### Architecture 2: Cloud — AgentCore Gateway + Lambda
+
+For team-wide or production deployments. A DevOps agent (or any OAuth2 client) calls the MCP server through Amazon Bedrock AgentCore Gateway. Inbound auth is handled by Cognito (JWT), outbound auth by IAM (SigV4). The DevOps Agent also has direct S3 read access (`s3:GetObject`, `s3:ListBucket`) to list and fetch PCAPs.
 
 ```mermaid
 graph TB
-    subgraph Clients ["👥 Clients"]
-        A[DevOps Agent\nKiro / AI Workflow]
+    subgraph Client ["👥 Client"]
+        A["DevOps Agent / Kiro /<br/>AI Workflow"]
     end
 
-    subgraph Auth_In ["🔐 Inbound Auth\n(OAuth2 / Cognito)"]
-        B[Amazon Cognito\nUser Pool]
-        C[JWT Token\nValidation]
+    subgraph Auth ["🔐 Authentication"]
+        B["Amazon Cognito<br/>User Pool"]
     end
 
     subgraph Gateway ["🌐 AgentCore Gateway"]
-        D[AgentCore\nGateway Endpoint]
+        D["MCP Endpoint<br/>(validates JWT, signs with SigV4)"]
     end
 
     subgraph Compute ["⚡ AWS Lambda"]
-        E[PCAP Analyzer\nMCP Server]
-        F[tshark\nLambda Layer]
+        E["PCAP Analyzer<br/>MCP Server"]
+        F["tshark<br/>(Lambda Layer)"]
     end
 
-    subgraph Auth_Out ["🔑 Outbound Auth\n(IAM)"]
-        G[IAM Role\npcap-analyzer-lambda-role]
+    subgraph Storage ["📦 PCAP Storage"]
+        H["Amazon S3<br/>pcap-analyzer-storage"]
     end
 
-    subgraph Storage ["📦 PCAP Ingestion & Storage"]
-        H[Amazon S3\npcap-analyzer-storage]
-        I[AWS SSM\nRun Command]
-        J[Manual Upload\naws s3 cp]
+    subgraph Ingestion ["📥 PCAP Ingestion"]
+        I["AWS SSM Run Command<br/>(live capture)"]
+        J["Manual Upload<br/>(aws s3 cp)"]
+        K["EC2 / Servers"]
     end
 
-    subgraph Network ["🖥️ Target Infrastructure"]
-        K[EC2 Instances\n/ Servers]
-    end
-
-    A -->|1. POST /oauth2/token| B
-    B -->|2. Bearer JWT| A
-    A -->|3. MCP Request +\nAuthorization: Bearer| D
-    D -->|4. Validate JWT| C
-    C -->|5. Token Valid ✓| D
-    D -->|6. Invoke Lambda\nIAM SigV4| E
-    E --> F
-    E -->|7. IAM-signed\nAWS API calls| G
-    G -->|8. Read PCAP from S3| H
-    I -->|Active Capture:\ntcpdump → s3 cp| H
-    J -->|Manual Upload| H
-    K -->|SSM Agent| I
-    H -->|PCAP files| E
+    A -->|"1. POST /oauth2/token<br/>(client_credentials)"| B
+    B -->|"2. Bearer JWT"| A
+    A -->|"3. MCP Request +<br/>Authorization: Bearer"| D
+    A -->|"s3:GetObject /<br/>s3:ListBucket<br/>(list & fetch PCAPs)"| H
+    D -->|"4. Invoke Lambda<br/>(IAM SigV4)"| E
+    E -->|"5. Downloads PCAP<br/>to /tmp"| H
+    E -->|"6. Runs analysis"| F
+    K -->|"SSM Agent"| I
+    I -->|"tcpdump → s3 cp"| H
+    J -->|"Upload .pcap"| H
 
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style B fill:#ff9,stroke:#333,stroke-width:2px
-    style C fill:#ff9,stroke:#333,stroke-width:2px
     style D fill:#bbf,stroke:#333,stroke-width:3px
     style E fill:#bfb,stroke:#333,stroke-width:4px
     style F fill:#fbb,stroke:#333,stroke-width:2px
-    style G fill:#ffd,stroke:#333,stroke-width:2px
     style H fill:#dff,stroke:#333,stroke-width:2px
     style I fill:#fbf,stroke:#333,stroke-width:2px
     style J fill:#dfd,stroke:#333,stroke-width:2px
     style K fill:#eee,stroke:#333,stroke-width:2px
 ```
+
+**Data flow:**
+1. Client authenticates with Cognito, receives JWT
+2. Client can list/fetch PCAPs from S3 directly (`s3:GetObject`, `s3:ListBucket`)
+3. Client sends MCP request to AgentCore Gateway with Bearer token
+4. Gateway validates JWT, then invokes Lambda using IAM SigV4
+5. Lambda downloads the PCAP from S3 to `/tmp`, then invokes tshark for analysis
+6. Server returns MCP response through the gateway
 
 ### Key Capabilities
 
@@ -283,7 +289,7 @@ aws lambda create-function \
   --environment Variables="{PCAP_STORAGE_DIR=/tmp/pcap_storage,WIRESHARK_PATH=/opt/bin/tshark}"
 ```
 
-> **Note**: Add `/opt/bin` to `ALLOWED_TSHARK_DIRS` in `server.py` for Lambda deployments.
+> **Note**: For Lambda deployments, set the `WIRESHARK_PATH` environment variable to `/opt/bin/tshark` (the path where your Lambda layer installs tshark).
 
 #### Step 3: Deploy tshark Layer
 
@@ -520,7 +526,7 @@ Edit `~/.aws/amazonq/mcp.json`:
 | `MAX_CAPTURE_DURATION` | Maximum capture duration in seconds | `3600` |
 | `WIRESHARK_PATH` | Path to tshark executable | `tshark` |
 
-> **Security**: The tshark path is validated against an allowlist (`/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/snap/bin`). Add custom paths to `ALLOWED_TSHARK_DIRS` in `server.py`.
+> **Security**: The server validates that the tshark path is a non-empty string and sanitizes all command arguments against shell injection characters (`;`, `&`, `|`, `` ` ``, `$`). Set the `WIRESHARK_PATH` environment variable to point to your tshark binary.
 
 ---
 
@@ -657,7 +663,7 @@ brew install wireshark              # macOS
 sudo apt-get install tshark         # Linux
 ```
 
-If installed but you see "tshark path not in allowed directories", add its parent directory to `ALLOWED_TSHARK_DIRS` in `server.py`.
+If tshark is installed in a non-standard location, set the `WIRESHARK_PATH` environment variable to the full path of your tshark binary.
 </details>
 
 <details>
