@@ -3,7 +3,7 @@
 <div align="center">
 
 [![PyPI version](https://img.shields.io/pypi/v/awslabs.pcap-analyzer-mcp-server.svg)](https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/awslabs.pcap-analyzer-mcp-server.svg)](https://pypi.org/project/awslabs.pcap-analyzer-mcp-server/)
+[![Downloads](https://static.pepy.tech/badge/awslabs.pcap-analyzer-mcp-server)](https://pepy.tech/project/awslabs.pcap-analyzer-mcp-server)
 [![GitHub clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/aws-samples/sample-pcap-analyzer-mcp/main/traffic-data/clones-total-badge.json)](https://github.com/aws-samples/sample-pcap-analyzer-mcp)
 [![GitHub views](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/aws-samples/sample-pcap-analyzer-mcp/main/traffic-data/views-total-badge.json)](https://github.com/aws-samples/sample-pcap-analyzer-mcp)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
