@@ -65,14 +65,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Install the built wheel
-          uv pip install dist/*.whl --system
+          # Install the built wheel in a virtual environment
+          uv venv .venv
+          uv pip install dist/*.whl --python .venv/bin/python
 
           # Verify the entry point binary exists
-          which awslabs.pcap-analyzer-mcp-server
-
-          # Verify it can be invoked (MCP servers don't have --help typically, so just check import)
-          python -c "from awslabs.pcap_analyzer_mcp_server.server import main; print('Import OK')"
+          .venv/bin/python -c "from awslabs.pcap_analyzer_mcp_server.server import main; print('Import OK')"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
