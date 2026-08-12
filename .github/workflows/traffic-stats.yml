@@ -1,0 +1,83 @@
+name: Collect Traffic Stats
+
+on:
+  schedule:
+    # Every Monday and Thursday at 16:30 UTC (11:30 AM ET / 9:00 AM PT)
+    - cron: "30 16 * * 1,4"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  collect-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect traffic data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          REPO="aws-samples/sample-pcap-analyzer-mcp"
+          OUTPUT_DIR="traffic-data"
+          mkdir -p "$OUTPUT_DIR"
+
+          echo "=== Collecting traffic stats for $REPO ==="
+
+          # Fetch current 14-day window
+          gh api "/repos/$REPO/traffic/clones?per=day" > "$OUTPUT_DIR/clones_latest.json"
+          gh api "/repos/$REPO/traffic/views?per=day" > "$OUTPUT_DIR/views_latest.json"
+          gh api "/repos/$REPO/traffic/popular/referrers" > "$OUTPUT_DIR/referrers_latest.json"
+          gh api "/repos/$REPO/traffic/popular/paths" > "$OUTPUT_DIR/paths_latest.json"
+
+          # Initialize CSVs if missing
+          if [ ! -f "$OUTPUT_DIR/clones_history.csv" ]; then
+            echo "date,count,uniques" > "$OUTPUT_DIR/clones_history.csv"
+          fi
+          if [ ! -f "$OUTPUT_DIR/views_history.csv" ]; then
+            echo "date,count,uniques" > "$OUTPUT_DIR/views_history.csv"
+          fi
+
+          # Append new clone data (skip duplicates)
+          jq -r '.clones[] | "\(.timestamp | split("T")[0]),\(.count),\(.uniques)"' \
+            "$OUTPUT_DIR/clones_latest.json" | while read line; do
+            DATE_ENTRY=$(echo "$line" | cut -d',' -f1)
+            if ! grep -q "^$DATE_ENTRY" "$OUTPUT_DIR/clones_history.csv"; then
+              echo "$line" >> "$OUTPUT_DIR/clones_history.csv"
+            fi
+          done
+
+          # Append new views data (skip duplicates)
+          jq -r '.views[] | "\(.timestamp | split("T")[0]),\(.count),\(.uniques)"' \
+            "$OUTPUT_DIR/views_latest.json" | while read line; do
+            DATE_ENTRY=$(echo "$line" | cut -d',' -f1)
+            if ! grep -q "^$DATE_ENTRY" "$OUTPUT_DIR/views_history.csv"; then
+              echo "$line" >> "$OUTPUT_DIR/views_history.csv"
+            fi
+          done
+
+          # Print summary
+          TOTAL_CLONES=$(jq '.count' "$OUTPUT_DIR/clones_latest.json")
+          UNIQUE_CLONES=$(jq '.uniques' "$OUTPUT_DIR/clones_latest.json")
+          TOTAL_VIEWS=$(jq '.count' "$OUTPUT_DIR/views_latest.json")
+          UNIQUE_VIEWS=$(jq '.uniques' "$OUTPUT_DIR/views_latest.json")
+
+          echo ""
+          echo "=== Traffic Summary (last 14 days) ==="
+          echo "Clones: $TOTAL_CLONES total, $UNIQUE_CLONES unique"
+          echo "Views:  $TOTAL_VIEWS total, $UNIQUE_VIEWS unique"
+
+      - name: Commit and push stats
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add traffic-data/
+          if git diff --cached --quiet; then
+            echo "No new traffic data to commit"
+          else
+            git commit -m "chore: update traffic stats [skip ci]"
+            git push
+          fi
