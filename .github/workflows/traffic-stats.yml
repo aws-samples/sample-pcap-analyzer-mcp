@@ -70,7 +70,7 @@ jobs:
           echo "Clones: $TOTAL_CLONES total, $UNIQUE_CLONES unique"
           echo "Views:  $TOTAL_VIEWS total, $UNIQUE_VIEWS unique"
 
-          # Generate shields.io endpoint badge JSON files
+          # Generate shields.io endpoint badge JSON files (last 14 days)
           cat > "$OUTPUT_DIR/clones-badge.json" << EOF
           {
             "schemaVersion": 1,
@@ -88,6 +88,30 @@ jobs:
             "color": "green"
           }
           EOF
+
+          # Compute all-time totals from history CSVs
+          ALL_TIME_CLONES=$(tail -n +2 "$OUTPUT_DIR/clones_history.csv" | awk -F',' '{s+=$2} END {print s+0}')
+          ALL_TIME_VIEWS=$(tail -n +2 "$OUTPUT_DIR/views_history.csv" | awk -F',' '{s+=$2} END {print s+0}')
+
+          cat > "$OUTPUT_DIR/clones-total-badge.json" << EOF
+          {
+            "schemaVersion": 1,
+            "label": "total clones",
+            "message": "${ALL_TIME_CLONES}",
+            "color": "blue"
+          }
+          EOF
+
+          cat > "$OUTPUT_DIR/views-total-badge.json" << EOF
+          {
+            "schemaVersion": 1,
+            "label": "total views",
+            "message": "${ALL_TIME_VIEWS}",
+            "color": "green"
+          }
+          EOF
+
+          echo "All-time: $ALL_TIME_CLONES clones, $ALL_TIME_VIEWS views"
 
       - name: Commit and push stats
         run: |
