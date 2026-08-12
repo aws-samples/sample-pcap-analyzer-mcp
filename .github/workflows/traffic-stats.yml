@@ -70,6 +70,25 @@ jobs:
           echo "Clones: $TOTAL_CLONES total, $UNIQUE_CLONES unique"
           echo "Views:  $TOTAL_VIEWS total, $UNIQUE_VIEWS unique"
 
+          # Generate shields.io endpoint badge JSON files
+          cat > "$OUTPUT_DIR/clones-badge.json" << EOF
+          {
+            "schemaVersion": 1,
+            "label": "clones (14d)",
+            "message": "${TOTAL_CLONES} total | ${UNIQUE_CLONES} unique",
+            "color": "blue"
+          }
+          EOF
+
+          cat > "$OUTPUT_DIR/views-badge.json" << EOF
+          {
+            "schemaVersion": 1,
+            "label": "views (14d)",
+            "message": "${TOTAL_VIEWS} total | ${UNIQUE_VIEWS} unique",
+            "color": "green"
+          }
+          EOF
+
       - name: Commit and push stats
         run: |
           git config user.name "github-actions[bot]"
