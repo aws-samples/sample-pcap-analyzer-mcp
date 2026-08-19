@@ -14,10 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TRAFFIC_TOKEN }}
 
       - name: Collect traffic data
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Traffic API requires push/admin access, which the default
+          # GITHUB_TOKEN lacks. Use a PAT with "Administration: read" (fine-grained)
+          # or "repo" scope (classic), stored as the TRAFFIC_TOKEN secret.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
         run: |
           set -euo pipefail
 
